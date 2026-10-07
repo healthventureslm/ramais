@@ -80,18 +80,51 @@ export function acaoParaEncerrarPeloSolicitante(estado: EstadoSolicitacao): Acao
 /**
  * Nova mensagem de um solicitante: continua a solicitação aberta, reabre a resolvida
  * dentro da janela ou abre uma nova.
+ *
+ * Resolvida só pela automação (a base respondeu e nenhum setor tocou nela, `setorId: null`)
+ * não tem para quem reabrir: um pedido novo ("mande toalhas", um áudio, uma foto) abre outra
+ * solicitação, que passa pelo roteamento. Só uma cortesia curta ("obrigado", "ok", "ありがとう")
+ * fica na mesma: a base responde se souber, senão nada acontece, e a fila não recebe cortesia.
+ * Na dúvida abre: pedido perdido custa mais que um "valeu" na fila.
  */
 export function destinoNovaMensagem(
-  aberta: { estado: EstadoSolicitacao; resolvidaEm: Date | null } | null,
+  aberta: { estado: EstadoSolicitacao; resolvidaEm: Date | null; setorId?: string | null } | null,
   agora: Date,
   reaberturaHoras: number,
+  mensagem?: { texto: string | null; temMidia: boolean },
 ): 'continuar' | 'reabrir' | 'nova' {
   if (!aberta) return 'nova';
   if (aberta.estado === 'encerrada' || aberta.estado === 'cancelada') return 'nova';
   if (aberta.estado === 'resolvida') {
     if (!aberta.resolvidaEm) return 'nova';
     const horas = (agora.getTime() - aberta.resolvidaEm.getTime()) / 3_600_000;
-    return horas <= reaberturaHoras ? 'reabrir' : 'nova';
+    if (horas > reaberturaHoras) return 'nova';
+    if (aberta.setorId === null && mensagem && (mensagem.temMidia || !ehCortesia(mensagem.texto ?? ''))) return 'nova';
+    return 'reabrir';
   }
   return 'continuar';
+}
+
+// Escritas sem espaço entre palavras (japonês, chinês, coreano): a expressão sai inteira.
+const CORTESIA_CJK = /(どうも)?ありがと(う)?(ございます|ございました)?|どうも|谢谢(你|您)?|謝謝|多谢|감사합니다|감사해요|고마워요?/gu;
+// Fora da palavra (?<!\p{L}) … (?!\p{L}): "ok" não pode comer o começo de "okupado".
+const CORTESIA_LATINA = new RegExp(
+  '(?<!\\p{L})(obrigad[oa]s?|brigad[oa]|valeu|agrade[cç]\\p{L}*|thanks?|thank you|thx|ty|cheers|gracias|merci|danke|schön|schoen|grazie|arigat[oō]u?|' +
+    'спасибо|شكرا|ok|okay|beleza|perfeito|[oó]timo|great|perfect|nice|legal|show|de nada|tudo (bem|certo)|' +
+    // enchimento que acompanha o agradecimento
+    'muito|mesmo|much|so|very|you|a|o|the|pela|pelo|por|ajuda|help|tudo|all|for|your|sir|senhor|senhora|again|lot|um|uma|bem|certo|' +
+    'ent[aã]o|beaucoup|mil|mille|mucho|muchas|vielen|tante)(?!\\p{L})',
+  'giu',
+);
+
+/**
+ * Agradecimento ou concordância curta, em qualquer idioma comum: não é pedido novo.
+ * Cortesia é o que, sem as expressões de cortesia e o enchimento, não deixa letra nenhuma:
+ * "muito obrigado mesmo" e "ありがとうございます" são; "ok, chuveiro frio" e "タオルください" não.
+ */
+export function ehCortesia(texto: string): boolean {
+  const t = texto.trim().toLowerCase();
+  if (!t || t.length > 60) return false;
+  const resto = t.replace(CORTESIA_CJK, ' ').replace(CORTESIA_LATINA, ' ');
+  return !/\p{L}/u.test(resto);
 }

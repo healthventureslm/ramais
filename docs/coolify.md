@@ -152,6 +152,20 @@ Ainda não existe um comando para criar a primeira organização e o primeiro ad
 4. Em Administração → Equipe, gere senhas novas para as outras pessoas ou desative quem não usar.
 5. Volte `SEED_DEMO=false`.
 
+## Hotel de demonstração (apresentação comercial)
+
+`tools/seed/demo.ts` cria uma organização separada, **VOA Hotéis**, com a unidade **Wyndham Rio Barra** (`tools/seed/demo-dados.ts`):
+
+- 181 quartos (201–1413), QR para o chat do quarto;
+- 12 hóspedes de vários países em casa;
+- base de conhecimento com os dados públicos do hotel;
+- setores com a IA em modo **automático**: o pedido cai direto no setor certo;
+- logins `admin`, `gerente`, `recepcao`, `governanca`, `manutencao`, `restaurante` e `concierge`, todos `@wyndham.demo` e com a mesma senha.
+
+Para criar em produção, no ramais-api: variável `DEMO_SENHA` (6+ caracteres, só Runtime) e **Redeploy**. A migração cria o hotel uma vez só; os redeploys seguintes não mexem nele.
+
+Os horários de café, check-in e check-out, piscina e academia, e a numeração dos quartos, foram supostos (não são públicos). Confira em Administração → Base de conhecimento antes da apresentação. Depois dela, troque as senhas ou desative as contas.
+
 ## 5. WhatsApp (quando houver número)
 
 - **Webhook** no painel da Meta: `https://<dominio>/api/webhooks/whatsapp`. Ele passa pelo Caddy, depois pelo nginx, e chega à api.

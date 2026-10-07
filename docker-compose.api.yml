@@ -106,7 +106,7 @@ services:
     exclude_from_hc: true
     restart: "no"
     logging: *logs
-    # SEED_DEMO=true carrega o hotel de demonstração (idempotente). Ainda não há outro jeito de
+    # SEED_DEMO=true carrega o Hotel Piloto de desenvolvimento (idempotente). Ainda não há outro jeito de
     # criar a primeira organização e o primeiro admin. As contas do seed têm senha CONHECIDA
     # (tools/seed/dados.ts): troque a do admin no primeiro acesso e volte SEED_DEMO para false.
     command:
@@ -117,12 +117,16 @@ services:
         || { echo "defina DB_SENHA_OWNER e DB_SENHA_APP nas variáveis do recurso"; exit 1; };
         pnpm db:setup && pnpm db:migrate
         && if [ "$$SEED_DEMO" = true ]; then pnpm db:seed; fi
+        && if [ -n "$$DEMO_SENHA" ]; then pnpm --filter @ramais/seed demo; fi
     environment:
       <<: *banco-urls
       DATABASE_URL_ADMIN: postgres://postgres:${DB_SENHA_ADMIN:-}@banco:5432/postgres
       DB_SENHA_OWNER: ${DB_SENHA_OWNER:-}
       DB_SENHA_APP: ${DB_SENHA_APP:-}
       SEED_DEMO: ${SEED_DEMO:-false}
+      # Com valor, cria o hotel de demonstração (tools/seed/demo.ts), uma vez só; todos os logins
+      # dele usam esta senha. Vazia, não faz nada.
+      DEMO_SENHA: ${DEMO_SENHA:-}
     depends_on:
       banco:
         condition: service_healthy

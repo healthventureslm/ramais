@@ -4,6 +4,7 @@ import {
   aplicarGate,
   trocarIdioma,
   destinoNovaMensagem,
+  ehCortesia,
   ErroTransicao,
   extrairCodigoLocal,
   extrairQuartoSobrenome,
@@ -72,6 +73,32 @@ describe('estados', () => {
     expect(destinoNovaMensagem(resolvida(25), agora, 24)).toBe('nova');
     expect(destinoNovaMensagem({ estado: 'em_atendimento', resolvidaEm: null }, agora, 24)).toBe('continuar');
     expect(destinoNovaMensagem(null, agora, 24)).toBe('nova');
+  });
+
+  it('resolvida só pela base: pedido novo abre outra solicitação, cortesia curta não', () => {
+    const agora = new Date('2026-10-02T12:00:00Z');
+    const pelaBase = { estado: 'resolvida' as const, resolvidaEm: new Date(agora.getTime() - 60_000), setorId: null };
+    const texto = (t: string) => ({ texto: t, temMidia: false });
+    expect(destinoNovaMensagem(pelaBase, agora, 24, texto('Could you send two extra towels, please?'))).toBe('nova');
+    expect(destinoNovaMensagem(pelaBase, agora, 24, { texto: null, temMidia: true })).toBe('nova');
+    expect(destinoNovaMensagem(pelaBase, agora, 24, texto('Thanks!'))).toBe('reabrir');
+    expect(destinoNovaMensagem(pelaBase, agora, 24, texto('muito obrigado mesmo'))).toBe('reabrir');
+    // Japonês não separa palavras: contar espaços não serve.
+    expect(destinoNovaMensagem(pelaBase, agora, 24, texto('エアコンが効きません。誰か来てもらえますか？'))).toBe('nova');
+    // Com setor, continua reabrindo para o mesmo setor.
+    const peloSetor = { ...pelaBase, setorId: 'setor-1' };
+    expect(destinoNovaMensagem(peloSetor, agora, 24, texto('Could you send two extra towels, please?'))).toBe('reabrir');
+  });
+
+  it('reconhece cortesia sem engolir pedido curto', () => {
+    for (const t of ['Thanks!', 'thank you so much', 'obrigado', 'Muito obrigada!', 'valeu 👍', 'ok', 'Ok, obrigado',
+      'Perfeito, obrigado!', 'gracias', 'merci beaucoup', 'danke schön', 'ありがとうございます', 'どうもありがとう', '谢谢', '감사합니다', '🙏']) {
+      expect(ehCortesia(t), t).toBe(true);
+    }
+    for (const t of ['toalhas por favor', 'ok, chuveiro frio', 'a toalha toda molhada', 'thanks, the AC is broken',
+      'タオルください', 'エアコンが効きません', 'mais toalhas', 'room 305', '']) {
+      expect(ehCortesia(t), t).toBe(false);
+    }
   });
 });
 

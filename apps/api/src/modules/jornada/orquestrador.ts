@@ -142,9 +142,10 @@ export class Orquestrador {
         const deOutraEstadia = Boolean(e.naoAntesDe && ultima.rows[0] && new Date(ultima.rows[0].criado_em) < new Date(e.naoAntesDe));
         const anterior = deOutraEstadia ? null : (ultima.rows[0] ?? null);
         const destino = destinoNovaMensagem(
-          anterior ? { estado: anterior.estado, resolvidaEm: anterior.resolvida_em } : null,
+          anterior ? { estado: anterior.estado, resolvidaEm: anterior.resolvida_em, setorId: anterior.setor_id } : null,
           new Date(),
           cfg.tempos.reaberturaHoras,
+          { texto: e.texto, temMidia: e.tipo !== 'texto' },
         );
 
         let s: SolicitacaoRow;
