@@ -223,7 +223,7 @@ docker compose --profile seed run --rm seed
 - Túnel: `ngrok http 8080`. Atrás de um proxy HTTPS, defina `WEB_URL_PUBLICA` para o QR do quarto sair com o domínio certo.
 - Saúde: `GET /api/saude` (a API e o banco respondem) e `/version.txt` (commit do build da web, via `GIT_COMMIT`).
 - Logs: `docker compose logs -f api worker`. Parar: `docker compose down` (os volumes ficam; `down -v` apaga o banco).
-- Produção no Coolify, em dois recursos como o VoiceHealth: `docker-compose.api.yml` na vps-api (banco, migração, api, worker; api só no Tailscale) e `apps/web/Dockerfile` na vps-web (domínio). Passo a passo em [docs/coolify.md](docs/coolify.md).
+- Produção no Coolify, na convenção da infra (projeto 4): `docker-compose.api.yml` na vps-api (banco, migração, api, worker; api em `100.100.212.18:3406`) e `apps/web/Dockerfile` na vps-web (`100.117.232.104:8490`, atrás do Caddy). Passo a passo em [docs/coolify.md](docs/coolify.md).
 
 ## Testes
 

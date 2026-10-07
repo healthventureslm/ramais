@@ -20,6 +20,10 @@ RUN turbo prune @ramais/web --docker
 
 # ---- Build ----
 FROM base AS build
+# O Coolify injeta cada variável da aplicação como ARG no topo de cada estágio. Um NODE_ENV=production
+# vindo de lá faria o pnpm pular as devDependencies (tsc, vite, turbo) e o build morreria adiante.
+# ENV vence ARG de mesmo nome.
+ENV NODE_ENV=development
 # Manifests e lockfile antes do código: a instalação só roda de novo se as dependências mudarem.
 COPY --from=poda /repo/out/json/ .
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
@@ -28,10 +32,13 @@ COPY --from=poda /repo/out/full/ .
 COPY tsconfig.base.json ./
 RUN pnpm turbo run build --filter=@ramais/web...
 
-# Carimbo de versão: distingue "deploy não rodou" de "cache do navegador".
+# Carimbo de versão: distingue "deploy não rodou" de "cache do navegador". O Coolify não passa o
+# commit ao build (medido na infra em 10/09/2026), então vai também a hora do build, que não
+# depende de build arg nenhum.
 ARG GIT_COMMIT=""
 ARG SOURCE_COMMIT=""
-RUN c="${GIT_COMMIT:-$SOURCE_COMMIT}"; echo "${c:-desconhecido}" > apps/web/dist/version.txt
+RUN c="${GIT_COMMIT:-$SOURCE_COMMIT}"; \
+    printf 'commit: %s\nbuild:  %s\n' "${c:-desconhecido}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > apps/web/dist/version.txt
 
 # ---- Imagem final ----
 FROM nginx:1.29-alpine AS web

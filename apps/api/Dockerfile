@@ -30,6 +30,10 @@ RUN turbo prune @ramais/api @ramais/seed --docker
 
 # ---- Build (com dependências de desenvolvimento) ----
 FROM base AS build
+# O Coolify injeta cada variável da aplicação como ARG no topo de cada estágio. Um NODE_ENV=production
+# vindo de lá faria o pnpm pular as devDependencies (tsc, vite, turbo) e o build morreria adiante.
+# ENV vence ARG de mesmo nome.
+ENV NODE_ENV=development
 # Manifests e lockfile antes do código: a instalação só roda de novo se as dependências mudarem.
 COPY --from=poda /repo/out/json/ .
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
@@ -78,8 +82,9 @@ ENV GIT_COMMIT=$GIT_COMMIT SOURCE_COMMIT=$SOURCE_COMMIT
 USER node
 WORKDIR /app/apps/api
 
-ENV PORTA=3000
-EXPOSE 3000
+# Convenção da infra: API do projeto 4 em 3406, a mesma porta dentro e fora do contêiner.
+ENV PORTA=3406
+EXPOSE 3406
 # O worker não tem HTTP: no compose ele desliga este healthcheck.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget -q -O /dev/null "http://127.0.0.1:${PORTA}/saude" || exit 1
