@@ -223,6 +223,7 @@ docker compose --profile seed run --rm seed
 - Túnel: `ngrok http 8080`. Atrás de um proxy HTTPS, defina `WEB_URL_PUBLICA` para o QR do quarto sair com o domínio certo.
 - Saúde: `GET /api/saude` (a API e o banco respondem) e `/version.txt` (commit do build da web, via `GIT_COMMIT`).
 - Logs: `docker compose logs -f api worker`. Parar: `docker compose down` (os volumes ficam; `down -v` apaga o banco).
+- Produção no Coolify: `docker-compose.coolify.yml` (sem portas publicadas, variáveis explícitas). Passo a passo em [docs/coolify.md](docs/coolify.md).
 
 ## Testes
 

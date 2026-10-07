@@ -1,0 +1,148 @@
+# Ramais no Coolify (build pack "Docker Compose", arquivo /docker-compose.coolify.yml).
+#
+# Diferenças para o docker-compose.yml (máquina local):
+#   - Nenhuma porta publicada: o proxy do Coolify chega na web pelo domínio
+#     (Domains → serviço `web` → https://seu-dominio:80). api e banco ficam só na rede interna.
+#   - Toda variável que a api e o worker leem está listada em `environment` com ${VAR}: é assim
+#     que o Coolify mostra cada uma na aba Environment Variables (ele não lê env_file).
+#     `${VAR:?}` = obrigatória (o deploy falha sem ela); `${VAR:-x}` = opcional com default.
+#   - `exclude_from_hc`: a migração roda e sai; não conta para a saúde da aplicação.
+#     (Extensão do Coolify: o `docker compose` local recusa essa chave. Por isso o arquivo é outro.)
+#   - Seed de demonstração só com SEED_DEMO=true (ver o serviço migracao).
+#
+# Mesmas imagens do desenvolvimento (apps/api/Dockerfile e apps/web/Dockerfile).
+
+x-banco-urls: &banco-urls
+  DATABASE_URL: postgres://ramais_app:${DB_SENHA_APP:?}@banco:5432/ramais
+  DATABASE_URL_OWNER: postgres://ramais_owner:${DB_SENHA_OWNER:?}@banco:5432/ramais
+
+x-imagem-api: &imagem-api
+  context: .
+  dockerfile: apps/api/Dockerfile
+  args:
+    # O Coolify passa o commit do deploy; /saude devolve como `versao`.
+    SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+
+x-ambiente-app: &ambiente-app
+  <<: *banco-urls
+  PORTA: "3000"
+  # 32+ caracteres aleatórios. Trocar desloga todo mundo.
+  JWT_SEGREDO: ${JWT_SEGREDO:?}
+  # Endereço público (https://...). O QR do chat do quarto aponta para <WEB_URL_PUBLICA>/q/<código>.
+  WEB_URL_PUBLICA: ${WEB_URL_PUBLICA:?}
+  WEB_ORIGEM: ${WEB_URL_PUBLICA:?}
+
+  # WhatsApp. Comece com true: nada vai para a Meta e dá para testar pelo simulador.
+  META_DRY_RUN: ${META_DRY_RUN:-true}
+  META_APP_SECRET: ${META_APP_SECRET:?}
+  META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:?}
+  META_TOKEN: ${META_TOKEN:-}
+  META_API_VERSAO: ${META_API_VERSAO:-v23.0}
+
+  # IA. Sem chave, roteia por palavras-chave e não traduz. Defaults = configuração B (docs/custos.md).
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  IA_MODELO_ROTEAMENTO: ${IA_MODELO_ROTEAMENTO:-typesafe/jev-1.13}
+  IA_MODELO_ROTEAMENTO_ALTERNATIVO: ${IA_MODELO_ROTEAMENTO_ALTERNATIVO:-google/gemini-3.1-flash-lite}
+  IA_MODELO_TRADUCAO: ${IA_MODELO_TRADUCAO:-google/gemini-2.5-flash-lite}
+  IA_MODELO_TRADUCAO_ALTERNATIVO: ${IA_MODELO_TRADUCAO_ALTERNATIVO:-google/gemini-3.1-flash-lite}
+  IA_MODELO_RESPOSTA: ${IA_MODELO_RESPOSTA:-google/gemini-2.5-flash-lite}
+  IA_MODELO_MULTIMODAL: ${IA_MODELO_MULTIMODAL:-google/gemini-3.1-flash-lite}
+  IA_CONFIANCA: ${IA_CONFIANCA:-autoconsistencia}
+  IA_AMOSTRAS: ${IA_AMOSTRAS:-3}
+  IA_SEM_RETENCAO: ${IA_SEM_RETENCAO:-true}
+  IA_PIVOT_INGLES: ${IA_PIVOT_INGLES:-true}
+
+  # Mídia: `local` usa o volume abaixo; `s3` exige bucket e credenciais da AWS.
+  ARMAZENAMENTO: ${ARMAZENAMENTO:-local}
+  ARMAZENAMENTO_DIR: /dados/armazenamento
+  S3_BUCKET: ${S3_BUCKET:-}
+  AWS_REGION: ${AWS_REGION:-sa-east-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+
+  # Push do app da equipe (FCM). Vazio = notificações só no log.
+  FCM_CONTA_SERVICO_B64: ${FCM_CONTA_SERVICO_B64:-}
+
+services:
+  banco:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_SENHA_ADMIN:?}
+    volumes:
+      # Postgres 18 guarda os dados em /var/lib/postgresql/18/docker: o volume vai no pai.
+      - banco:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migracao:
+    build:
+      <<: *imagem-api
+      target: migracao
+    exclude_from_hc: true
+    restart: "no"
+    # SEED_DEMO=true carrega o hotel de demonstração (idempotente). Ainda não há outro jeito de
+    # criar a primeira organização e o primeiro admin. As contas do seed têm senha CONHECIDA
+    # (tools/seed/dados.ts): troque a do admin no primeiro acesso e volte SEED_DEMO para false.
+    command: ["sh", "-c", "pnpm db:setup && pnpm db:migrate && if [ \"$$SEED_DEMO\" = true ]; then pnpm db:seed; fi"]
+    environment:
+      <<: *banco-urls
+      DATABASE_URL_ADMIN: postgres://postgres:${DB_SENHA_ADMIN:?}@banco:5432/postgres
+      DB_SENHA_OWNER: ${DB_SENHA_OWNER:?}
+      DB_SENHA_APP: ${DB_SENHA_APP:?}
+      SEED_DEMO: ${SEED_DEMO:-false}
+    depends_on:
+      banco:
+        condition: service_healthy
+
+  api:
+    build:
+      <<: *imagem-api
+      target: api
+    restart: unless-stopped
+    environment: *ambiente-app
+    volumes:
+      - armazenamento:/dados/armazenamento
+    depends_on:
+      migracao:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      <<: *imagem-api
+      target: api
+    restart: unless-stopped
+    command: ["node", "--enable-source-maps", "dist/main.worker.js"]
+    environment: *ambiente-app
+    volumes:
+      - armazenamento:/dados/armazenamento
+    # Sem HTTP: o healthcheck da imagem (GET /saude) não se aplica.
+    healthcheck:
+      disable: true
+    depends_on:
+      migracao:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:3000
+      # Faixa de onde vem o proxy do Coolify: `docker network inspect coolify` mostra a subnet.
+      # O default da imagem (172.16.0.0/12) cobre as redes padrão do Docker.
+      TRUSTED_PROXY: ${TRUSTED_PROXY:-172.16.0.0/12}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  banco:
+  # Fotos e áudios (ARMAZENAMENTO=local), compartilhados entre api e worker. Entra no backup.
+  armazenamento:
