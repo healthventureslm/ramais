@@ -1,0 +1,210 @@
+/* ============================================================
+   Ramais — a marca por cima do design system da Health Ventures
+   ------------------------------------------------------------
+   Os componentes do DS usam só papéis (--action-primary, --live,
+   --surface-card…), e os papéis apontam para as RAMPAS. Então a
+   marca entra trocando as rampas, não os componentes:
+
+     petrol  -> libré   azul-marinho do uniforme: ação, navegação, chaveiro
+     coral   -> latão   os botões da libré: o AO VIVO, o pedido tocando
+     sand    -> linho   superfícies, um neutro sem o amarelo do creme
+     ink     -> grafite texto e estrutura, frio o bastante para o marinho
+
+   emerald, amber e crimson (positivo, aviso, perigo) ficam como no DS.
+   Também trocam aqui os poucos literais com tinta verde do DS (sombra,
+   anel de foco, véu, vidro, cartão escuro).
+
+   Este arquivo vem DEPOIS dos tokens do DS e repete os mesmos seletores:
+   ganha pela ordem, com a mesma especificidade.
+   ============================================================ */
+
+:root {
+  /* Libré (era petrol) — branco sobre o 500: 8,7:1 */
+  --petrol-950: #0b1424;
+  --petrol-900: #121f36;
+  --petrol-800: #1a2c4b;
+  --petrol-700: #1f3558;
+  --petrol-600: #26406a;
+  --petrol-500: #2f4c7e;
+  --petrol-400: #5876a6;
+  --petrol-300: #8ea3c4;
+  --petrol-200: #bcc9dc;
+  --petrol-100: #dfe5ee;
+  --petrol-50:  #f0f3f8;
+
+  /* Latão (era coral) — texto 700 sobre 100: 5,6:1 */
+  --coral-700: #7a5410;
+  --coral-600: #b07a1c;
+  --coral-500: #c9922e;
+  --coral-400: #dcac52;
+  --coral-100: #f6e8c8;
+
+  /* Linho (era sand) */
+  --sand-50:  #f8f7f4;
+  --sand-100: #f1f0ec;
+  --sand-200: #e5e3dd;
+  --sand-300: #d6d3cb;
+  --sand-400: #c2beb3;
+
+  /* Grafite (era ink) — 500 sobre sand-200: 4,7:1; 400 como limite de controle: 3,2:1 */
+  --ink-950: #0e131a;
+  --ink-900: #151b24;
+  --ink-800: #222a35;
+  --ink-700: #313a46;
+  --ink-600: #4a5360;
+  --ink-500: #5b6470;
+  --ink-400: #8a919b;
+  --ink-300: #b3b8bf;
+  --ink-200: #d3d6da;
+  --ink-100: #e6e8ea;
+
+  /* Literais do DS tingidos de petrol, agora de marinho */
+  --surface-overlay: rgba(11, 20, 36, 0.5);
+  --veil-brand: rgba(141, 165, 208, 0.22);
+  --shadow-xs:  0 1px 2px rgba(18, 31, 54, 0.06);
+  --shadow-sm:  0 1px 2px rgba(18, 31, 54, 0.06), 0 2px 6px rgba(18, 31, 54, 0.05);
+  --shadow-md:  0 2px 4px rgba(18, 31, 54, 0.06), 0 6px 16px rgba(18, 31, 54, 0.08);
+  --shadow-lg:  0 4px 8px rgba(18, 31, 54, 0.06), 0 16px 36px rgba(18, 31, 54, 0.12);
+  --shadow-xl:  0 8px 16px rgba(11, 20, 36, 0.10), 0 28px 60px rgba(11, 20, 36, 0.18);
+  --shadow-inset: inset 0 1px 2px rgba(18, 31, 54, 0.08);
+  --shadow-ring-inset: inset 0 0 0 var(--border-hair) rgba(18, 31, 54, 0.06);
+  --focus-ring-color: rgba(88, 118, 166, 0.38);
+  --glass-sand:         rgba(248, 247, 244, 0.72);
+  --glass-sand-heavy:   rgba(248, 247, 244, 0.88);
+  --glass-petrol:       rgba(18, 31, 54, 0.62);
+  --glass-petrol-heavy: rgba(18, 31, 54, 0.84);
+  --scrim-sheet: rgba(11, 20, 36, 0.42);
+  --scrim-menu:  rgba(11, 20, 36, 0.28);
+
+  /* O número do quarto, como o chaveiro pendurado atrás da recepção (único token próprio do Ramais). */
+  --chaveiro:       var(--petrol-900);
+  --chaveiro-texto: var(--sand-50);
+  /* Nota interna: o papel amarelo do balcão. */
+  --recado:       #fbefb3;
+  --recado-borda: #e2cd6a;
+  /* Chat do quarto (hóspede): o desenho do WhatsApp com a libré do hotel. */
+  --zap-parede:       #ebe5d9;
+  --zap-meu:          #d9e4f4;
+  --zap-deles:        #ffffff;
+  --zap-cabeca:       #121f36;
+  --zap-cabeca-texto: #f8f7f4;
+  --zap-cabeca-sub:   #bcc9dc;
+  --zap-dia:          #f8f7f4;
+  --zap-visto:        #2f6fd0;
+  --zap-sombra:       0 1px 0.5px rgba(14, 19, 26, 0.13);
+}
+
+/* ---- Escuro: os mesmos papéis, rampas invertidas como no DS (superfície de marca fica escura) ---- */
+:root[data-theme='dark'],
+:root.dark:not([data-theme='light']) {
+  --petrol-700: #a9bde0;
+  --petrol-600: #98b1d8;
+  --petrol-500: #7f9cc9;   /* ação no escuro: texto petrol-950 por cima, 7,4:1 */
+  --petrol-400: #b1c4e3;   /* press: continua clareando, na direção do hover */
+  --petrol-300: #c7d4ea;
+  --petrol-200: #bcc9dc;
+  --petrol-100: #1b2a44;
+  --petrol-50:  #141f33;
+
+  --coral-700: #ecc983;
+  --coral-600: #e0b35e;
+  --coral-500: #c9922e;
+  --coral-400: #dcac52;
+  --coral-100: #33280f;
+
+  --sand-50:  #161d27;
+  --sand-100: #10151c;
+  --sand-200: #0b0f15;
+  --sand-300: #232b37;
+  --sand-400: #2e3846;
+
+  --ink-950: #f7f9fb;
+  --ink-900: #eceff3;
+  --ink-800: #dee3e9;
+  --ink-700: #c4ccd5;
+  --ink-600: #a6b0bc;
+  --ink-500: #8b96a3;
+  --ink-400: #6f7a87;
+  --ink-300: #3c4552;
+  --ink-200: #2b333f;
+  --ink-100: #212833;
+
+  --surface-card: #171e28;
+  --surface-inverse: #2a3442;
+  --brand-soft-fg: #a9bde0;
+  --focus-ring-color: rgba(141, 165, 208, 0.45);
+  --glass-sand:         rgba(23, 30, 40, 0.72);
+  --glass-sand-heavy:   rgba(23, 30, 40, 0.90);
+  --glass-petrol:       rgba(18, 31, 54, 0.68);
+  --glass-petrol-heavy: rgba(18, 31, 54, 0.90);
+  --glass-fallback:     #171e28;
+  --chaveiro:       #c9d3e3;
+  --chaveiro-texto: #0e131a;
+  --recado:       #3a3318;
+  --recado-borda: #6e5f22;
+  --zap-parede:       #0c1117;
+  --zap-meu:          #1f3558;
+  --zap-deles:        #1b232e;
+  --zap-cabeca:       #171e28;
+  --zap-cabeca-texto: #eceff3;
+  --zap-cabeca-sub:   #8b96a3;
+  --zap-dia:          #1b232e;
+  --zap-visto:        #7fb0f0;
+  --zap-sombra:       0 1px 0.5px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --petrol-700: #a9bde0;
+    --petrol-600: #98b1d8;
+    --petrol-500: #7f9cc9;
+    --petrol-400: #b1c4e3;
+    --petrol-300: #c7d4ea;
+    --petrol-100: #1b2a44;
+    --petrol-50:  #141f33;
+
+    --coral-700: #ecc983;
+    --coral-600: #e0b35e;
+    --coral-100: #33280f;
+
+    --sand-50:  #161d27;
+    --sand-100: #10151c;
+    --sand-200: #0b0f15;
+    --sand-300: #232b37;
+    --sand-400: #2e3846;
+
+    --ink-950: #f7f9fb;
+    --ink-900: #eceff3;
+    --ink-800: #dee3e9;
+    --ink-700: #c4ccd5;
+    --ink-600: #a6b0bc;
+    --ink-500: #8b96a3;
+    --ink-400: #6f7a87;
+    --ink-300: #3c4552;
+    --ink-200: #2b333f;
+    --ink-100: #212833;
+
+    --surface-card: #171e28;
+    --surface-inverse: #2a3442;
+    --brand-soft-fg: #a9bde0;
+    --focus-ring-color: rgba(141, 165, 208, 0.45);
+    --glass-sand:         rgba(23, 30, 40, 0.72);
+    --glass-sand-heavy:   rgba(23, 30, 40, 0.90);
+    --glass-petrol:       rgba(18, 31, 54, 0.68);
+    --glass-petrol-heavy: rgba(18, 31, 54, 0.90);
+    --glass-fallback:     #171e28;
+    --chaveiro:       #c9d3e3;
+    --chaveiro-texto: #0e131a;
+    --recado:       #3a3318;
+    --recado-borda: #6e5f22;
+    --zap-parede:       #0c1117;
+    --zap-meu:          #1f3558;
+    --zap-deles:        #1b232e;
+    --zap-cabeca:       #171e28;
+    --zap-cabeca-texto: #eceff3;
+    --zap-cabeca-sub:   #8b96a3;
+    --zap-dia:          #1b232e;
+    --zap-visto:        #7fb0f0;
+    --zap-sombra:       0 1px 0.5px rgba(0, 0, 0, 0.35);
+  }
+}

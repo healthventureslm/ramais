@@ -1,0 +1,416 @@
+/* ============================================================
+   Health Ventures — Color tokens
+   ------------------------------------------------------------
+   Palette philosophy: deep clinical "petrol" green carries the
+   brand and chrome; warm sand/cream is the working canvas (calm,
+   human, easy on eyes across a 12h shift); a single coral accent
+   marks LIVE / recording / human moments. Cool blues are avoided
+   on purpose — that is the generic-healthtech trap we escape.
+   ============================================================ */
+
+:root {
+  /* ---- Petrol (primary brand / deep green) ---- */
+  --petrol-950: #04201D;
+  --petrol-900: #073833;   /* sidebars, headers, brand surfaces */
+  --petrol-800: #0C4B43;
+  --petrol-700: #115D53;
+  --petrol-600: #177063;
+  --petrol-500: #1D8272;   /* primary actionable green.
+     Era #1E8576, que dava 4.495:1 com branco por cima — reprovava AA por
+     0.005. Como e o preenchimento do botao primario, do marcador de
+     Stepper, da celula de data selecionada e da pagina ativa, o defeito
+     aparecia no controle mais usado do sistema. #1D8272 da 4.68:1 e a
+     diferenca de matiz e imperceptivel lado a lado. */
+  --petrol-400: #3AA293;
+  --petrol-300: #6FBCB1;
+  --petrol-200: #A9D8D0;
+  --petrol-100: #D8EDE9;
+  --petrol-50:  #EEF7F5;
+
+  /* ---- Emerald (positive / vitals OK / success) ---- */
+  --emerald-700: #0B7651; /* 4.72:1 sobre emerald-100 (era 4.49) */
+  --emerald-600: #0E9F6E;
+  --emerald-500: #16B981;
+  --emerald-100: #D4F2E5;
+
+  /* ---- Coral (LIVE / recording / human highlight) ---- */
+  --coral-700: #AC422A;   /* 4.79:1 sobre coral-100 (era 3.94) */
+  --coral-600: #DD5A3C;
+  --coral-500: #E8674A;
+  --coral-400: #F08369;
+  --coral-100: #FBE2DA;
+
+  /* ---- Sand (warm neutral canvas) ---- */
+  --sand-50:  #FBF9F4;
+  --sand-100: #F6F2E9;
+  --sand-200: #ECE6D8;
+  --sand-300: #DFD7C6;
+  --sand-400: #CBC1AC;
+
+  /* ---- Ink / warm gray (text + structure) ---- */
+  --ink-950: #0D1714;
+  --ink-900: #13201C;
+  --ink-800: #1F2D28;
+  --ink-700: #2E3D38;
+  --ink-600: #4A5852;
+  /* Era #65726C: 5,0:1 no branco, mas 4,04:1 sobre --surface-sunken (sand-200),
+     que e onde descricao de EmptyState e contador de aba moram. Medido pelo
+     test:contrast. Um degrau mais escuro passa em toda superficie clara. */
+  --ink-500: #5A6761;
+  --ink-400: #8A958F;
+  --ink-300: #B2BBB5;
+  --ink-200: #D4DAD5;
+  --ink-100: #E7EBE6;
+  --white:   #FFFFFF;
+
+  /* ---- Amber (attention / pending / beds) ---- */
+  --amber-700: #8C5E10;   /* 4.78:1 sobre amber-100 (era 3.92) */
+  --amber-600: #C8861A;
+  --amber-500: #E0A02A;
+  --amber-100: #F8EBCD;
+
+  /* ---- Crimson (danger / critical) ---- */
+  --crimson-700: #A8362E;
+  --crimson-600: #C2483C;
+  --crimson-500: #D85D50;
+  --crimson-100: #F7DBD7;
+
+  /* ===========================================================
+     SEMANTIC ALIASES — reference these in product & components
+     =========================================================== */
+
+  /* Surfaces */
+  --surface-canvas:    var(--sand-100);   /* app background */
+  --surface-raised:    var(--sand-50);    /* secondary panels */
+  --surface-card:      var(--white);      /* cards, sheets */
+  /* Camada que FLUTUA acima de um cartao: popover, menu, tooltip, painel de
+     chat. No claro e o proprio cartao — a sombra ja separa. Existe por causa do
+     escuro (ver theme-dark.css): la sombra quase nao aparece, e popover abrindo
+     sobre cartao ficava cartao sobre cartao, com a borda de cima sumindo.
+     Antes isso era resolvido com fio de 1px + sombra larga — as duas metaforas
+     de separacao que o DESIGN.md proibe juntas. */
+  --surface-float:     var(--surface-card);
+  --surface-sunken:    var(--sand-200);   /* wells, track */
+  --surface-brand:     var(--petrol-900); /* sidebar / brand chrome */
+  --surface-brand-soft:var(--petrol-50);  /* tinted brand fills */
+  --surface-overlay:   rgba(13, 23, 20, 0.55); /* scrims */
+
+  /* Text */
+  --text-strong:   var(--ink-900);
+  --text-body:     var(--ink-700);
+  --text-muted:    var(--ink-500);
+  --text-subtle:   var(--ink-400);
+  --text-on-brand: var(--sand-50);
+  --text-on-brand-muted: var(--petrol-200);
+  --text-inverse:  var(--white);
+  /* Superficie contrastante — snackbar, tooltip. No escuro ela NAO vira
+     branca: um retangulo branco sobre canvas escuro e um farol. Vira uma
+     superficie elevada, e o contraste vem da elevacao, nao da inversao. */
+  --surface-inverse: var(--ink-900);
+  /* Par da superficie contrastante. NAO use --surface-card como texto
+     aqui: no escuro ele e escuro sobre escuro (1.15:1, invisivel). */
+  --text-on-inverse: var(--white);
+  --text-link:     var(--petrol-600);
+
+  /* Primary action */
+  --action-primary:        var(--petrol-500);
+  --action-primary-hover:  var(--petrol-600);
+  --action-primary-press:  var(--petrol-700);
+  --action-primary-text:   var(--white);
+
+  /* ---- Ação destrutiva, PREENCHIDA -----------------------------------
+     Papel separado de `--danger-fg/-bg`, que é o par tingido (faixa de
+     alerta, chip). Aqui o vermelho é FUNDO de botão e o texto vai por
+     cima dele.
+
+     Não deriva da rampa como os outros estados: `--crimson-700` é texto
+     no claro (#A8362E) mas CLAREIA para #F09084 no escuro, porque a rampa
+     inverte por papel. O botão danger usava esse degrau como hover — e no
+     escuro passar o mouse trocava o fundo por um salmão claro com o mesmo
+     texto branco por cima: 2,2:1, ilegível exatamente no clique que
+     apaga alguma coisa.
+
+     `--crimson-600` é o único degrau que theme-dark.css mantém idêntico
+     de propósito (é fundo, não texto). Como a base não muda de tema, os
+     dois degraus abaixo também não mudam — por isso são hex fixos e não
+     têm override no tema escuro. Contraste com branco por cima:
+     base 4,9:1 · hover 6,5:1 · press 8,4:1 — escurece a cada passo, que é
+     o que faz o toque ser percebido. */
+  --action-danger:         var(--crimson-600);
+  --action-danger-hover:   #A8362E;
+  --action-danger-press:   #8E2A23;
+  --action-danger-text:    var(--white);
+
+  /* ---- Controle desabilitado ------------------------------------------
+     Existe para tirar `opacity` do caminho. Opacidade desbota o elemento
+     INTEIRO — inclusive o texto por cima do preenchimento — então um botão
+     primário a 45% vira verde lavado com branco por cima e o contraste
+     desaba; no escuro o resultado é sujeira, não "apagado".
+
+     A forma do controle continua inteira: só a energia sai. `-fg` é
+     deliberadamente mais fraco que o texto secundário, porque controle
+     desabilitado precisa PARECER inativo — essa é a informação.
+
+     Mas não tão fraco quanto era. Com --text-subtle puro dava 2,49:1 sobre
+     --state-disabled-bg no claro: o pior par do sistema. A WCAG isenta
+     controle inativo, e mesmo assim o número importa aqui, porque o texto
+     desabilitado costuma dizer POR QUE a ação não está disponível
+     ("indisponível neste turno") — e é lido de madrugada.
+
+     Metade entre muted e subtle. Medido: claro 3,13:1 sobre o fundo
+     desabilitado (era 2,49) e 3,89 sobre cartão; escuro 5,39 (era 4,45). O
+     texto secundário segue acima nos dois temas (claro 4,04 / escuro 6,45),
+     então desabilitado continua visivelmente mais apagado. O primeiro valor
+     é o fallback de navegador sem color-mix. */
+  --state-disabled-bg: var(--surface-sunken);
+  --state-disabled-fg: var(--text-subtle);
+  --state-disabled-fg: color-mix(in srgb, var(--text-muted) 50%, var(--text-subtle));
+  --state-disabled-bd: var(--border-subtle);
+
+  /* ---- Marcador de campo obrigatorio --------------------------------
+     Estava em --coral-600, que e a assinatura de LIVE/gravando da marca —
+     reservada, pelos proprios tokens, para "algo acontecendo AGORA". Um
+     asterisco de obrigatorio e o estado mais parado que existe.
+
+     Tambem nao pode ser --danger-fg: agora que o campo INVALIDO e vermelho
+     de verdade, pintar de vermelho o campo que so e obrigatorio faria os
+     dois estados se confundirem antes de a pessoa digitar qualquer coisa.
+
+     O asterisco nao precisa gritar: quem anuncia a obrigatoriedade e o
+     aria-required no controle, que ate agora nao existia. O papel dele e
+     estar presente e legivel (5:1 sobre cartao), nao chamar atencao. */
+  --field-required: var(--text-muted);
+
+  /* ---- Quando apagar a SUBARVORE e o caminho certo ------------------
+     Os tres papeis acima servem para o controle cujas cores o DS controla.
+     Nem todo desabilitado e assim: um item de Menu carrega icone e atalho
+     com cor propria, uma linha de ListItem carrega o conteudo do produto,
+     um Slider tem trilho + marcador + rotulos, um Switch precisa continuar
+     mostrando se esta LIGADO enquanto esta desabilitado, e uma Tag herda o
+     preenchimento da variante. Nesses casos nao da para reescrever cor por
+     cor — o unico instrumento e a opacidade, e ela nao esta errada.
+
+     O que estava errado era serem DEZ valores: 0.3, 0.4, 0.42, 0.45, 0.5,
+     0.55 e 0.6, metade escrita `.45` e metade `0.45`, espalhados por 17
+     componentes que nunca se compararam. Nenhuma regra — so o que pareceu
+     certo em cada arquivo, em dias diferentes.
+
+     0.5 e a mediana do que ja existia e o valor mais repetido, entao e
+     tambem o que menos mexe no que os produtos ja veem hoje. */
+  --opacity-disabled: 0.5;
+
+  /* Borders & lines */
+  --border-subtle:  var(--ink-100);
+  --border-default: var(--ink-200);
+  --border-strong:  var(--ink-300);
+
+  /* ---- Limite de CONTROLE interativo ---------------------------------
+     WCAG 1.4.11 pede 3:1 para a informacao visual que IDENTIFICA um
+     controle. O contorno em repouso de todo campo do DS era
+     `--border-default` (ink-200) e o do botao secondary era
+     `--border-strong` (ink-300). Medidos sobre o cartao:
+
+                    claro   escuro
+       ink-200       1.42     1.28
+       ink-300       1.97     1.68
+       ink-400       3.10     3.67   <- primeiro degrau que passa
+       ink-500       5.03     5.32
+
+     Os dois reprovavam, e no escuro reprovavam PIOR — o contrario do que
+     a inversao por rampa promete.
+
+     Por que um papel novo em vez de escurecer --border-strong: so parte
+     dos usos dele e limite de controle. O resto e estrutura (guia de
+     grafico, trilho do Timeline, pegador do Sheet), que nao tem esse piso.
+     Escurecer os 23 usos de uma vez mudaria a densidade do sistema
+     inteiro para resolver um problema que nao e de todos eles.
+
+     O hover precisa continuar ACIMA do repouso — por isso ink-500, e nao
+     o ink-300 de antes, que agora seria mais claro que o proprio repouso. */
+  --border-control:       var(--ink-400);
+  --border-control-hover: var(--ink-500);
+  --border-brand:   var(--petrol-500);
+  --focus-ring:     var(--petrol-400);
+
+  /* Feedback (fg / bg pairs) */
+  --positive-fg: var(--emerald-700);
+  --positive-bg: var(--emerald-100);
+  --warning-fg:  var(--amber-700);
+  --warning-bg:  var(--amber-100);
+  --danger-fg:   var(--crimson-700);
+  --danger-bg:   var(--crimson-100);
+  --info-fg:     var(--petrol-700);
+  --info-bg:     var(--petrol-100);
+
+  /* ---- Camada de estado (hover/press) -------------------------------
+     Hover e press NAO devem apontar para a rampa de superficie direto: no
+     escuro sand-100 vira o proprio canvas, e o hover some. Estes aliases
+     mudam de natureza por tema — tinta de areia no claro, veu de luz no
+     escuro. */
+  --state-hover: var(--sand-100);
+  --state-press: var(--sand-200);
+  /* Terceiro degrau, para o controle cujo HOVER ja mora em --state-press.
+     Sao os alvos pequenos que precisam de hover forte para serem notados —
+     o x de Tag e Combobox, o <th> ordenavel, os botoes do rodape da
+     Sidebar. Sem este degrau eles ficavam sem press: repetir --state-press
+     no :active e nao dar retorno nenhum ao clique.
+
+     Nao e "mais um cinza": e o mesmo salto de --state-hover para
+     --state-press aplicado outra vez, para que press seja SEMPRE um degrau
+     mais fundo que hover, qualquer que seja o degrau de partida. */
+  --state-press-deep: var(--sand-300);
+
+  /* ---- Estado de MARCA sobre superficie neutra ------------------------
+     A terceira camada de estado do sistema, e a unica que estava sem nome.
+
+     --state-hover/-press sao tinta de AREIA: o caminho neutro, para quando a
+     interacao nao carrega significado de marca. --veil-* e luz, para quando o
+     fundo e petrol-900 e tinta nao aparece. Faltava o caso do meio: fundo
+     neutro, interacao que PERTENCE ao caminho de marca — a opcao sob o cursor
+     dentro de um popover, o dia do calendario, o atalho de periodo, o cartao
+     de radio escolhido.
+
+     Estava escrito como --petrol-50 / --petrol-100 cravados em 13 componentes
+     de forms/ mais Card e Tag, sempre no mesmo par e sempre no mesmo papel.
+     Nao era desleixo: era uma convencao consistente que nenhum nome
+     expressava, entao ninguem conseguia descobri-la a nao ser lendo o vizinho.
+     E o par que a Regra do press cita por nome (petrol-50 -> petrol-100).
+
+     Quando usar qual: se o estado significa "isto e o caminho da marca / isto
+     esta selecionado", e --state-brand-*. Se significa apenas "o cursor esta
+     aqui", e --state-hover/-press. */
+  --state-brand-hover: var(--petrol-50);
+  --state-brand-press: var(--petrol-100);
+
+  /* ---- VEU: luz por cima de superficie de marca ----------------------
+     Sobre sand a camada de estado e TINTA (--state-hover/-press, acima).
+     Sobre petrol-900 nao ha tinta possivel: escurecer um verde ja escuro nao
+     aparece. O instrumento la e o oposto — branco translucido.
+
+     Isto ja acontecia, so que sem nome. Havia ONZE alfas espalhados por nove
+     componentes — 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18, 0.22, 0.28, 0.30,
+     0.38 — nenhum derivado de outro, cada um escolhido num dia diferente. E o
+     mesmo defeito que --opacity-disabled resolveu quando eram dez opacidades
+     de desabilitado: nao era gosto, era ausencia de decisao.
+
+     Seis papeis, seis valores, e a escada e a mesma do resto do sistema:
+     hover -> press e um degrau, e o repouso de uma peca preenchida fica entre
+     os dois.
+
+     Nao levam override no tema escuro DE PROPOSITO: a superficie de marca e
+     petrol-900 nos dois temas, entao a luz por cima dela nao muda. Um veu que
+     invertesse por tema estaria assumindo um fundo que nunca existiu. */
+  --veil-line:   rgba(255, 255, 255, 0.08);  /* borda e divisoria sobre marca */
+  --veil-hover:  rgba(255, 255, 255, 0.10);
+  --veil-fill:   rgba(255, 255, 255, 0.14);  /* repouso: contador, chip, pilha */
+  --veil-press:  rgba(255, 255, 255, 0.18);
+  --veil-edge:   rgba(255, 255, 255, 0.28);  /* contorno de peca ja preenchida */
+  /* Texto inativo sobre marca. Nao usa --state-disabled-fg porque aquele e
+     tinta sobre superficie clara; aqui o apagado se faz tirando luz. */
+  --veil-fg-off: rgba(255, 255, 255, 0.38);
+
+  /* Unico veu que nao e branco: a marca ACESA sobre a marca profunda — o
+     realce do item ativo na sidebar. Fica no degrau claro de petrol-400 nos
+     dois temas, e o valor e literal de proposito: apontar para a rampa faria
+     ele clarear no escuro, sobre um fundo (petrol-900) que nao clareia. E o
+     mesmo motivo pelo qual os veus brancos acima nao tem override. */
+  --veil-brand: rgba(58, 162, 147, 0.22);
+
+  /* Texto sobre tinta de marca (petrol-50/100). Existe porque petrol-800/900
+     acumulavam dois papeis: superficie profunda E texto sobre tinta clara —
+     no escuro os dois nao podem ser a mesma cor. */
+  --brand-soft-fg: var(--petrol-800);
+
+  /* Glifo sobre preenchimento de sotaque (emerald/amber/coral/petrol-500).
+     Literal nos dois temas: os sotaques sao tons medios em ambos, entao
+     tinta escura e o unico valor que se le sobre todos eles. */
+  --text-on-accent: #0D1714;
+
+  /* Brilho do shimmer de Skeleton */
+  --shimmer: rgba(255, 255, 255, 0.65);
+
+  /* ---- Rampa semântica completa -------------------------------------
+     Antes só existiam `-fg` e `-bg` por família, sem degrau para borda,
+     hover ou faixa sutil. Na falta deles os produtos inventavam
+     `--danger-50/200/600/700`, que nunca existiram: a declaração caía no
+     fallback hex ao lado e rodava cor fora da paleta sem ninguém notar.
+
+     `-hover` e `-subtle` são derivados por color-mix dos PRÓPRIOS tokens
+     de papel, não de hex fixo. Com isso eles se adaptam sozinhos ao tema
+     escuro (misturar com `-fg` clareia no escuro e escurece no claro) e
+     não precisam de override em theme-dark.css.
+
+     A primeira declaração de cada par é o fallback para navegadores sem
+     color-mix; a segunda vence onde há suporte. */
+  --danger-border: var(--crimson-500);
+  --danger-hover:  var(--crimson-100);
+  --danger-hover:  color-mix(in srgb, var(--danger-bg) 85%, var(--danger-fg));
+  --danger-subtle: var(--crimson-100);
+  --danger-subtle: color-mix(in srgb, var(--danger-bg) 45%, var(--surface-card));
+
+  --warning-border: var(--amber-500);
+  --warning-hover:  var(--amber-100);
+  --warning-hover:  color-mix(in srgb, var(--warning-bg) 85%, var(--warning-fg));
+  --warning-subtle: var(--amber-100);
+  --warning-subtle: color-mix(in srgb, var(--warning-bg) 45%, var(--surface-card));
+
+  --positive-border: var(--emerald-500);
+  --positive-hover:  var(--emerald-100);
+  --positive-hover:  color-mix(in srgb, var(--positive-bg) 85%, var(--positive-fg));
+  --positive-subtle: var(--emerald-100);
+  --positive-subtle: color-mix(in srgb, var(--positive-bg) 45%, var(--surface-card));
+
+  --info-border: var(--petrol-500);
+  --info-hover:  var(--petrol-100);
+  --info-hover:  color-mix(in srgb, var(--info-bg) 85%, var(--info-fg));
+  --info-subtle: var(--petrol-100);
+  --info-subtle: color-mix(in srgb, var(--info-bg) 45%, var(--surface-card));
+
+  --live-border: var(--coral-500);
+  --live-hover:  var(--coral-100);
+  --live-hover:  color-mix(in srgb, var(--live-bg) 85%, var(--live-strong));
+  --live-subtle: var(--coral-100);
+  --live-subtle: color-mix(in srgb, var(--live-bg) 45%, var(--surface-card));
+
+  /* ---- Categorização não-semântica (DS-14) ---------------------------
+     Onze categorias clínicas não cabem em cinco matizes, e abrir a paleta
+     para azul/violeta cairia justamente no visual genérico de healthtech
+     que a marca evita de propósito.
+
+     A resposta oficial do DS é um EIXO DUPLO: família × tratamento. Cinco
+     famílias × três tratamentos = quinze combinações distinguíveis sem
+     inventar matiz. `filled` carrega mais peso visual que `outline`, que
+     carrega mais que `neutral` — então ordene as categorias por relevância
+     clínica, não por acaso.
+
+     Categoria NUNCA deve reusar o par semântico: um chip de "Medicações"
+     em `--danger-bg` lê como alerta. Use estes tokens. */
+  --cat-neutral-bg: var(--surface-sunken);
+  /* text-muted sobre surface-sunken da 4.04:1 — reprova. O chip neutro ja e
+     o mais fraco do eixo pelo FUNDO; o texto nao precisa enfraquecer junto. */
+  --cat-neutral-fg: var(--text-body);
+
+  /* ---- LIVE: algo acontecendo AGORA -------------------------------
+     Nao e "gravacao". Gravacao e um exemplo, do VoiceHealth. O papel do
+     token e sinalizar processo em andamento que a pessoa precisa notar
+     mesmo olhando de longe, e cada produto tem o seu:
+
+       VoiceHealth    captura de audio correndo
+       Leito Liberado higienizacao de leito em andamento
+       Campainha      chamado aberto, aguardando atendimento
+
+     Se voce esta usando LIVE para um estado PARADO (concluido, com erro,
+     pendente sem relogio correndo), o token errado e este — procure em
+     positive / danger / warning. */
+  --live:        var(--coral-500);
+  /* Tom corrente do estado LIVE. Existe para que o anel, o pulso e o foco
+     leiam a MESMA fonte, e para que o LiveActivity possa emprestar a forma da
+     assinatura a um processo que nao e coral (brand, positive, warning)
+     redeclarando uma linha. Fora dali, --live-tone E --live. */
+  --live-tone:   var(--live);
+  /* O texto LIVE usa coral-700: coral-600 dava 3.03:1 sobre live-bg.
+     A ASSINATURA da marca (o ponto e o pulso) continua em coral-500 —
+     so o texto escurece, e so onde precisa se ler. */
+  --live-strong: var(--coral-700);
+  --live-bg:     var(--coral-100);
+}

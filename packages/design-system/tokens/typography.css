@@ -1,0 +1,92 @@
+/* ============================================================
+   Health Ventures — Typography tokens
+   ------------------------------------------------------------
+   Three roles: Display (Schibsted Grotesk), Text (IBM Plex Sans),
+   Mono (IBM Plex Mono). Type scale is a tight ~1.2 ratio tuned
+   for dense clinical screens; line-heights are generous for long
+   shifts. Sizes are in rem (root = 16px).
+   ============================================================ */
+
+:root {
+  /* ---- Families ---- */
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-sans:    "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+
+  /* ---- Weights ---- */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-extra:    800;
+
+  /* ---- Font sizes ---- */
+  /* 11px é o PISO da escala (DS-10). Não há degrau abaixo, e isso é
+     decisão, não omissão: o DS agora serve mobile, onde o alvo mínimo é
+     44px e rótulo de 9–10px vira ilegível em tela pequena e em plantão
+     noturno. Precisou de menos que 11px? O problema é densidade de
+     informação, não tamanho de fonte. */
+  --text-2xs: 0.6875rem;  /* 11px — labels, badges, table meta */
+  --text-xs:  0.75rem;    /* 12px — captions, helper text */
+  --text-sm:  0.8125rem;  /* 13px — dense UI, secondary */
+  --text-md:  0.875rem;   /* 14px — body default in app */
+  --text-base:0.9375rem;  /* 15px — comfortable reading body */
+  --text-lg:  1.0625rem;  /* 17px — emphasised body, list titles */
+  --text-xl:  1.3125rem;  /* 21px — card titles, section heads */
+  --text-2xl: 1.625rem;   /* 26px — page titles */
+  --text-3xl: 2.0625rem;  /* 33px — display small */
+  --text-4xl: 2.625rem;   /* 42px — display */
+  --text-5xl: 3.375rem;   /* 54px — hero */
+  --text-6xl: 4.25rem;    /* 68px — marketing hero */
+
+  /* ---- Line heights ---- */
+  --leading-tight:   1.1;
+  --leading-snug:    1.25;
+  --leading-normal:  1.45;
+  --leading-relaxed: 1.6;
+
+  /* ---- Letter spacing ---- */
+  --tracking-tight:  -0.02em;   /* display headlines */
+  --tracking-snug:   -0.01em;   /* titles */
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;    /* small caps / overlines */
+  --tracking-wider:  0.12em;    /* overline labels */
+
+  /* ---- Atalhos de papel -------------------------------------------------
+     Sobraram QUATRO, e a poda tem evidencia.
+
+     Existiam nove. Cinco deles — hero, display, title, heading, subhead —
+     somavam ZERO consumidores no repo inteiro, e nao por
+     desleixo: a `font` shorthand funde cinco decisoes num token so, e a que
+     os componentes precisam variar e justamente a entrelinha. Contados no
+     codigo, os componentes escrevem text-xl com /1.2, /1.25 e /var(--leading-snug)
+     conforme o contexto; --type-heading cravava uma. Quem precisava de outra
+     tinha de reescrever o shorthand inteiro — e reescreveu, 77 vezes.
+
+     O que ficou sao os quatro que NAO variam: corpo e mono como padrao de
+     documento (o base.css aplica --type-body no body), o -sm do corpo denso, e
+     caption — o unico com adocao real fora de components/, com 17 call sites
+     em ui_kits/. Papel unico, entrelinha unica, abstracao honesta.
+
+     Nota de metodo: caption quase foi removido junto. A primeira varredura de
+     token orfao nao percorria ui_kits/, e o audit-token-refs so olha tokens/ e
+     components/ — os dois concordaram que ele estava morto. Quem discordou foi
+     o test:visual, com 3,6% da tela de login mudando. O audit-token-dead nasceu
+     dessa: ele varre ui_kits/ tambem.
+
+     Entrelinha continua saindo de --leading-*; tracking, de --tracking-*.
+     A camada que faltava nunca foi de shorthand, era a de tracking — e essa
+     agora tem os 25 call sites que antes eram valor cravado. */
+  --type-body:      var(--weight-regular) var(--text-base)/var(--leading-normal) var(--font-sans);
+  --type-body-sm:   var(--weight-regular) var(--text-md)/var(--leading-normal) var(--font-sans);
+  --type-caption:   var(--weight-regular) var(--text-xs)/var(--leading-normal) var(--font-sans);
+  --type-mono:      var(--weight-regular) var(--text-sm)/var(--leading-normal) var(--font-mono);
+}
+
+/* Overline: tiny tracked-out uppercase label used across the brand */
+.hv-overline {
+  font: var(--weight-semibold) var(--text-2xs)/1 var(--font-sans);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}

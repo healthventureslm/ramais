@@ -1,0 +1,73 @@
+/* ============================================================
+   Health Ventures — Motion tokens
+   ------------------------------------------------------------
+   "Progress at the speed of trust." Motion is refined and
+   purposeful: short, soft, never bouncy in clinical contexts.
+   Use --ease-standard for most UI; --ease-entrance for things
+   arriving on screen; --ease-exit for dismissals.
+   ============================================================ */
+
+:root {
+  /* ---- Durations ---- */
+  --dur-instant: 80ms;  /* @kind other */
+  --dur-fast:    140ms; /* @kind other */
+  --dur-normal:  200ms; /* @kind other */
+  --dur-slow:    280ms; /* @kind other */
+  --dur-slower:  400ms; /* @kind other */
+
+  /* ---- Easing ---- */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* @kind other */
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);  /* @kind other */
+  --ease-exit:     cubic-bezier(0.4, 0, 1, 1);     /* @kind other */
+  --ease-soft:     cubic-bezier(0.45, 0, 0.2, 1);  /* @kind other */
+
+  /* ---- Composed transitions ---- */
+  --transition-colors: color var(--dur-fast) var(--ease-standard),
+                       background-color var(--dur-fast) var(--ease-standard),
+                       border-color var(--dur-fast) var(--ease-standard);
+  --transition-shadow: box-shadow var(--dur-normal) var(--ease-standard);
+  /* NAO existe --transition-all, e a ausencia e a decisao.
+     `transition: all` esta na lista de "nunca" do DESIGN.md, e o token
+     embalava exatamente isso num nome que passava em code review. Nenhum
+     componente o usava; os dois usos viviam no index.html. Um atalho que so
+     o proprio showcase consome nao e atalho, e uma brecha. */
+}
+
+/* Keyframes shared across the system */
+@keyframes hv-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes hv-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes hv-scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes hv-shimmer {
+  from { background-position: -180% 0; }
+  to   { background-position: 180% 0; }
+}
+/* A tinta vinha cravada em rgba(232, 103, 74) — uma COPIA de --coral-500 que
+   ninguem atualizaria junto se a marca mexesse no coral, e que ignorava o
+   --live-tone do elemento. Agora deriva: o pulso do LiveActivity em tone
+   "brand" pulsa petrol, e nao coral por engano. */
+@keyframes hv-pulse-live {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live-tone) 45%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--live-tone) 0%, transparent); }
+}
+@keyframes hv-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms; /* @kind other */
+    --dur-fast: 0ms;    /* @kind other */
+    --dur-normal: 0ms;  /* @kind other */
+    --dur-slow: 0ms;    /* @kind other */
+    --dur-slower: 0ms;  /* @kind other */
+  }
+}

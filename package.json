@@ -1,0 +1,29 @@
+{
+  "name": "ramais",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev": "turbo run dev --parallel --filter=@ramais/api --filter=@ramais/web",
+    "db:setup": "pnpm --filter @ramais/db run setup",
+    "db:migrate": "pnpm --filter @ramais/db run migrate",
+    "db:seed": "pnpm --filter @ramais/seed run seed",
+    "db:reset": "pnpm --filter @ramais/db run reset && pnpm db:seed",
+    "eval": "pnpm --filter @ramais/eval run eval",
+    "sim": "pnpm --filter @ramais/simulador run sim",
+    "carga": "pnpm --filter @ramais/carga run carga"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.7",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,213 @@
+/* ============================================================
+   Ramais — cola de layout
+   ------------------------------------------------------------
+   Os componentes (botão, lista, cartão, abas, diálogo, chat…) vêm
+   prontos do design system. Aqui fica só o que é das TELAS do Ramais:
+   a grade das colunas, o chaveiro, o recado e a folha de QR.
+   Só tokens do DS; nenhuma cor literal.
+   ============================================================ */
+
+html, body, #raiz { height: 100%; margin: 0; }
+body { background: var(--surface-canvas); color: var(--text-body); font: var(--type-body); }
+
+.dado { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.mudo { color: var(--text-muted); }
+.pequeno { font: var(--type-caption); }
+
+/* ---------- Casca ---------- */
+.casca { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; height: 100dvh; }
+.casca__miolo { min-height: 0; overflow: hidden; display: grid; }
+.rolagem { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+@media (max-width: 767px) {
+  .casca { grid-template-rows: auto minmax(0, 1fr); }
+  .casca__miolo { padding-bottom: var(--tabbar-total); }
+  .casca--sem-tabbar .casca__miolo { padding-bottom: 0; }
+}
+
+/* ---------- Chaveiro do quarto ---------- */
+.chaveiro {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-width: 44px; height: 26px; padding: 0 var(--space-2);
+  background: var(--chaveiro); color: var(--chaveiro-texto);
+  /* a forma da etiqueta do chaveiro: canto de baixo mais redondo, onde fica a argola */
+  border-radius: var(--radius-xs) var(--radius-xs) var(--radius-xs) var(--radius-md);
+  font: var(--weight-bold) var(--text-sm) / 1 var(--font-display);
+  font-variant-numeric: tabular-nums; letter-spacing: var(--tracking-snug);
+}
+.chaveiro--pendente { background: transparent; color: var(--text-strong); box-shadow: inset 0 0 0 var(--border-thick) var(--border-control); }
+.chaveiro--grande { min-width: 56px; height: 34px; font-size: var(--text-lg); }
+
+/* ---------- Recado (nota interna) ---------- */
+.recado {
+  align-self: center; width: min(88%, 620px);
+  background: var(--recado); border: var(--border-hair) solid var(--recado-borda);
+  border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3);
+  color: var(--text-strong);
+}
+.recado__texto { white-space: pre-wrap; overflow-wrap: anywhere; }
+.recado__meta { font: var(--type-caption); color: var(--text-muted); margin-top: var(--space-1); }
+
+/* ---------- Atendimentos: lista · conversa · detalhes ---------- */
+.atendimentos { display: grid; grid-template-columns: 360px minmax(0, 1fr) 320px; min-height: 0; height: 100%; }
+.atendimentos__lista { min-height: 0; overflow-y: auto; background: var(--surface-card); border-right: var(--border-hair) solid var(--border-subtle); }
+.atendimentos__lista-topo { position: sticky; top: 0; z-index: 2; background: var(--surface-card); padding: var(--space-3) var(--space-3) 0; display: grid; gap: var(--space-3); }
+.atendimentos__detalhes { min-height: 0; overflow-y: auto; background: var(--surface-raised); border-left: var(--border-hair) solid var(--border-subtle); padding: var(--space-4); display: grid; gap: var(--space-4); align-content: start; }
+.atendimentos__vazio { display: grid; place-items: center; padding: var(--space-7); }
+
+.conversa { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; background: var(--surface-canvas); }
+.conversa__cabeca { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--surface-card); border-bottom: var(--border-hair) solid var(--border-subtle); min-width: 0; }
+.conversa__quem { min-width: 0; flex: 1; display: grid; }
+.conversa__quem strong { font: var(--weight-semibold) var(--text-md) / 1.25 var(--font-display); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversa__quem span { font: var(--type-caption); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversa__mensagens { overflow-y: auto; padding: var(--space-5) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); overscroll-behavior: contain; }
+.conversa__compositor { background: var(--surface-card); border-top: var(--border-hair) solid var(--border-subtle); padding: var(--space-3) var(--space-4) calc(var(--space-3) + var(--safe-bottom)); display: grid; gap: var(--space-2); }
+.conversa__traducao { font: var(--type-caption); color: var(--text-muted); margin-top: var(--space-1); }
+
+/* Foto e áudio nas conversas: o áudio leva a transcrição logo embaixo, como no WhatsApp. */
+.anexos { flex-wrap: nowrap; }
+.gravacao { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; }
+.gravacao__onda { flex: 1; min-width: 0; }
+.gravacao__tempo { color: var(--danger-fg); min-width: 5ch; text-align: right; }
+.midia { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); width: min(260px, 64vw); }
+.midia > * { min-width: 0; }
+.midia-foto { display: block; max-width: 100%; border-radius: var(--radius-sm); }
+.midia-foto--previa { max-height: 50vh; margin: 0 auto; object-fit: contain; }
+.midia-foto--carregando { width: 100%; aspect-ratio: 4 / 3; background: var(--surface-sunken); }
+.midia__transcricao { font: var(--type-body-sm); color: var(--text-body); border-top: var(--border-hair) solid var(--border-subtle); padding-top: var(--space-1); white-space: pre-wrap; }
+.midia__nota { font: var(--type-caption); color: var(--text-muted); }
+/* Na bolha da equipe (fundo da marca), as linhas de apoio usam o texto claro da marca. */
+.hv-bubble--user .conversa__traducao, .hv-bubble--user .midia__nota { color: var(--text-on-brand-muted); }
+.hv-bubble--user .midia__transcricao { color: var(--text-on-brand); border-top-color: var(--text-on-brand-muted); }
+.so-estreito { display: none; }
+.so-celular { display: none; }
+
+/* Pares rótulo/valor nos cartões de detalhe */
+.pares { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-4); font: var(--type-body-sm); }
+.pares dt { color: var(--text-muted); }
+.pares dd { margin: 0; color: var(--text-strong); min-width: 0; overflow-wrap: anywhere; }
+.pilha { display: grid; gap: var(--space-2); }
+.pilha--larga { gap: var(--space-4); }
+.linha { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.espaco { flex: 1; }
+
+@media (max-width: 1199px) {
+  .atendimentos { grid-template-columns: 320px minmax(0, 1fr); }
+  .atendimentos__detalhes { display: none; }
+  .so-estreito { display: inline-flex; }
+}
+@media (max-width: 767px) {
+  .atendimentos { grid-template-columns: minmax(0, 1fr); }
+  .atendimentos--aberto .atendimentos__lista { display: none; }
+  .atendimentos:not(.atendimentos--aberto) .conversa, .atendimentos:not(.atendimentos--aberto) .atendimentos__vazio { display: none; }
+  .so-celular { display: inline-flex; }
+  .so-largo { display: none; }
+  .conversa__mensagens { padding: var(--space-4) var(--space-3); }
+}
+
+/* ---------- Chat do quarto (hóspede, pelo QR): o desenho do WhatsApp ---------- */
+.zap { height: 100dvh; display: flex; flex-direction: column; max-width: 760px; margin: 0 auto; background: var(--zap-parede); }
+.zap--vazio { justify-content: center; padding: var(--space-6); background: var(--surface-canvas); }
+@media (min-width: 761px) { .zap { border-inline: var(--border-hair) solid var(--border-subtle); } }
+
+.zap__cabeca { display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-4) var(--space-2); background: var(--zap-cabeca); color: var(--zap-cabeca-texto); }
+.zap__avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--coral-500); color: var(--petrol-950); font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.zap__quem { min-width: 0; display: grid; }
+.zap__quem strong { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zap__quem span { font-size: 13px; color: var(--zap-cabeca-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.zap__parede { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3) var(--space-3); }
+.zap__aviso { align-self: center; max-width: 92%; margin: var(--space-2) 0 var(--space-3); padding: 6px 12px; border-radius: 8px; background: var(--recado); color: var(--text-body); font: var(--type-caption); text-align: center; box-shadow: var(--zap-sombra); }
+.zap__aviso svg { width: 12px; height: 12px; margin-right: 4px; vertical-align: -1px; }
+.zap__dia { align-self: center; margin: var(--space-3) 0 var(--space-2); padding: 5px 12px; border-radius: 8px; background: var(--zap-dia); color: var(--text-muted); font: var(--type-caption); box-shadow: var(--zap-sombra); }
+
+.zap__linha { display: flex; padding: 0 8px; }
+.zap__linha--meu { justify-content: flex-end; }
+.zap__linha--inicio { margin-top: var(--space-2); }
+.zap__bolha { position: relative; max-width: min(82%, 520px); padding: 6px 8px 8px 9px; border-radius: 8px; color: var(--text-strong); font: var(--type-body); line-height: 1.35; overflow-wrap: anywhere; box-shadow: var(--zap-sombra); }
+.zap__bolha::after { content: ''; display: block; clear: both; }
+.zap__bolha--deles { background: var(--zap-deles); }
+.zap__bolha--meu { background: var(--zap-meu); }
+/* O "rabinho" do primeiro balão da sequência. */
+.zap__bolha--rabo.zap__bolha--deles { border-top-left-radius: 0; }
+.zap__bolha--rabo.zap__bolha--meu { border-top-right-radius: 0; }
+.zap__bolha--rabo::before { content: ''; position: absolute; top: 0; width: 0; height: 0; border-top: 9px solid; }
+.zap__bolha--rabo.zap__bolha--deles::before { left: -8px; border-top-color: var(--zap-deles); border-left: 8px solid transparent; }
+.zap__bolha--rabo.zap__bolha--meu::before { right: -8px; border-top-color: var(--zap-meu); border-right: 8px solid transparent; }
+.zap__nome { font: var(--type-caption); font-weight: 600; color: var(--coral-700); margin-bottom: 2px; }
+.zap__texto { white-space: pre-wrap; }
+.zap__meta { float: right; display: inline-flex; align-items: center; gap: 3px; margin: 8px 0 -4px 12px; font-size: 11px; line-height: 1; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.zap__meta svg { width: 15px; height: 15px; }
+.zap__meta--falhou { color: var(--danger-fg); }
+.zap__visto { color: var(--zap-visto); }
+.zap__tentar { clear: both; text-align: right; }
+.zap__bolha .midia { width: min(260px, 64vw); margin-bottom: 2px; }
+.zap__subindo { aspect-ratio: 4 / 3; border-radius: var(--radius-sm); }
+
+.zap__rodape { display: flex; align-items: flex-end; gap: var(--space-2); padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); }
+.zap__campo { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px; min-height: 48px; padding: 4px 4px 4px 16px; border-radius: 24px; background: var(--zap-deles); box-shadow: var(--zap-sombra); }
+.zap__campo--gravando { padding: 4px 6px; align-items: center; }
+.zap__campo--gravando .gravacao { flex: 1; min-height: 40px; }
+/* A Textarea do DS vira o campo "pílula": sem borda própria, cresce com o texto. */
+.zap__campo .zap__texto-campo { flex: 1; min-width: 0; align-self: center; display: block; height: auto; min-height: 24px; max-height: 132px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; resize: none; line-height: 1.35; }
+/* O foco aparece na pílula inteira, não na caixa de texto. */
+.zap__rodape .zap__campo .zap__texto-campo:focus, .zap__rodape .zap__campo .zap__texto-campo:focus-visible { outline: none; box-shadow: none; border: 0; }
+.zap__campo:focus-within { box-shadow: var(--zap-sombra), 0 0 0 2px var(--focus-ring-color); }
+.zap__rodape .zap__redondo { flex: none; width: 48px; height: 48px; border-radius: 50%; }
+
+/* ---------- Dashboard ---------- */
+.dash-roscas { display: flex; flex-wrap: wrap; gap: var(--space-6); justify-content: space-around; margin-bottom: var(--space-4); }
+
+/* ---------- Páginas (painel, mensagens, administração, jornada) ---------- */
+.pagina { padding: var(--pad-page); display: grid; gap: var(--space-6); align-content: start; max-width: var(--content-max); margin: 0 auto; width: 100%; box-sizing: border-box; }
+.pagina--larga { max-width: none; }
+.grade-cartoes { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.grade-2 { display: grid; gap: var(--space-6); grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+@media (max-width: 1023px) { .grade-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .pagina { padding: var(--space-4) var(--pad-screen, var(--space-4)) var(--space-7); gap: var(--space-5); } }
+
+/* Mensagens diretas: lista · conversa */
+.diretas { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 0; height: 100%; }
+.diretas__lista { min-height: 0; overflow-y: auto; background: var(--surface-card); border-right: var(--border-hair) solid var(--border-subtle); }
+.diretas__busca { position: sticky; top: 0; z-index: 2; background: var(--surface-card); padding: var(--space-3); border-bottom: var(--border-hair) solid var(--border-subtle); }
+@media (max-width: 767px) {
+  .diretas { grid-template-columns: minmax(0, 1fr); }
+  .diretas--aberta .diretas__lista { display: none; }
+  .diretas:not(.diretas--aberta) .conversa, .diretas:not(.diretas--aberta) .atendimentos__vazio { display: none; }
+}
+
+/* ---------- Entrada ---------- */
+.entrada { min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.entrada__marca { background: var(--surface-brand); color: var(--text-on-brand); padding: var(--space-9); display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-7); }
+.entrada__nome { font: var(--weight-bold) var(--text-3xl) / 1 var(--font-display); letter-spacing: var(--tracking-tight); color: var(--text-on-brand); }
+.entrada__frase { max-width: 380px; font: var(--text-md) / var(--leading-relaxed) var(--font-sans); color: var(--text-on-brand-muted); }
+.entrada__quadro { display: grid; grid-template-columns: repeat(4, 56px); gap: var(--space-2); }
+.entrada__quadro span {
+  height: 34px; display: grid; place-items: center; border-radius: var(--radius-xs) var(--radius-xs) var(--radius-xs) var(--radius-md);
+  font: var(--weight-bold) var(--text-sm) / 1 var(--font-display); color: var(--text-on-brand-muted); box-shadow: inset 0 0 0 var(--border-thick) var(--veil-edge);
+}
+.entrada__quadro span.aceso { background: var(--live); color: var(--text-on-accent); box-shadow: var(--shadow-live); }
+.entrada__form { display: grid; place-items: center; padding: var(--space-7) var(--space-4); }
+.entrada__form form { width: min(380px, 100%); display: grid; gap: var(--space-4); }
+@media (max-width: 767px) {
+  .entrada { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .entrada__marca { padding: var(--space-6) var(--space-5); }
+  .entrada__quadro, .entrada__frase { display: none; }
+}
+
+/* ---------- Folha de QR para imprimir ---------- */
+.folha-qr { display: none; }
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body > *:not(.folha-qr) { display: none !important; }
+  html, body { height: auto; background: var(--white); }
+  .folha-qr { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8mm; }
+  .cartao-qr {
+    break-inside: avoid; border: var(--border-hair) dashed var(--border-strong); border-radius: 4mm; padding: 6mm; height: 128mm;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; font-family: var(--font-sans);
+  }
+  .cartao-qr-hotel { font-size: 11pt; font-weight: var(--weight-semibold); color: var(--text-muted); }
+  .cartao-qr-chamada { font-family: var(--font-display); font-size: 17pt; font-weight: var(--weight-bold); color: var(--text-strong); }
+  .cartao-qr-idiomas, .cartao-qr-dica { font-size: 9.5pt; color: var(--text-muted); }
+  .cartao-qr img { width: 62mm; height: 62mm; }
+  .cartao-qr-quarto { font-family: var(--font-display); font-size: 22pt; font-weight: var(--weight-bold); background: var(--chaveiro); color: var(--chaveiro-texto); padding: 1mm 5mm; border-radius: 1mm 1mm 1mm 3mm; }
+}

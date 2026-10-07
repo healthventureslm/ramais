@@ -1,0 +1,22 @@
+/* ============================================================
+   Health Ventures — Webfonts
+   ------------------------------------------------------------
+   Type system (chosen fresh — the previous brand was AI-generated):
+   · Display / headings : Schibsted Grotesk  (characterful modern grotesque)
+   · Body / UI / data   : IBM Plex Sans       (humanist, legible at density)
+   · Mono / clinical data: IBM Plex Mono       (vitals, codes, transcription)
+
+   NOTE FOR PRODUCTION: these are currently loaded from Google Fonts.
+   For an offline/self-hosted design system, drop the .woff2 binaries in
+   /fonts and replace the @import below with local @font-face rules.
+
+   PERFORMANCE (DS-17): an @import inside a bundled stylesheet only fires
+   AFTER that bundle has been downloaded and parsed, so the font request is
+   serialised behind it and first paint of real text is delayed. The @import
+   stays because it makes the package work standing alone, but every product
+   should short-circuit it with a preconnect + preload in its own <head>.
+   The exact tags are in readme.md §0 — copy them verbatim; a mismatched
+   `href` preloads a second, unused stylesheet and makes things worse.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');

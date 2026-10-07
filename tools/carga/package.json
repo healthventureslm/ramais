@@ -1,0 +1,21 @@
+{
+  "name": "@ramais/carga",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "carga": "tsx carga.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ramais/contracts": "workspace:*",
+    "@ramais/db": "workspace:*",
+    "@ramais/domain": "workspace:*",
+    "@ramais/vertical-hotel": "workspace:*",
+    "bcryptjs": "^3.0.3",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0"
+  }
+}

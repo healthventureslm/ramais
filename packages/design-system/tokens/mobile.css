@@ -1,0 +1,241 @@
+/* ============================================================
+   Health Ventures — Mobile foundations
+   ------------------------------------------------------------
+   Tokens da camada mobile (web / PWA). A linguagem é uma síntese:
+     · estrutura  → One UI 9  (peso na zona do polegar, raios
+                    generosos, listas agrupadas, ação ancorada
+                    embaixo, título grande que colapsa)
+     · material   → Liquid Glass (vidro APENAS no chrome
+                    flutuante — nav bar, tab bar, header de sheet,
+                    context menu. Conteúdo clínico nunca é
+                    translúcido: legibilidade é segurança)
+     · interação  → Telegram (swipe-back, long-press, swipe em
+                    lista, molas curtas e secas)
+
+   O vidro é TINGIDO DE MARCA (areia no claro, petrol no escuro),
+   nunca cinza neutro — é isso que impede o app de parecer um
+   template genérico de iOS.
+   ============================================================ */
+
+:root {
+  /* ---- Breakpoints (referência; use os @media abaixo) --------
+     mobile  ≤ 767px      tablet 768–1023px      desktop ≥ 1024px  */
+  --bp-xs: 380px;
+  --bp-sm: 480px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+
+  /* ---- Alvos de toque ----------------------------------------
+     44px é o mínimo absoluto (Apple HIG). 48px é o padrão
+     confortável (One UI / Material). Controles menores que 44
+     precisam de hit-slop via ::after — ver .hv-tap-slop.        */
+  --tap-min:     44px;
+  --tap-comfort: 48px;
+  --tap-large:   56px;  /* ação primária ancorada */
+
+  /* ---- Safe areas (notch, home indicator, câmera) ------------ */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+
+  /* ---- Chrome mobile ----------------------------------------- */
+  --navbar-height:       52px;   /* barra compacta (título colapsado) */
+  --navbar-large-height: 116px;  /* barra expandida — 64px de folga para
+                                    título grande (26px) + subtítulo    */
+  --tabbar-height:       58px;   /* altura útil, SEM a safe area      */
+  --tabbar-total:        calc(var(--tabbar-height) + var(--safe-bottom));
+  --sheet-grabber-w:     36px;
+  --sheet-grabber-h:     4px;
+  --fab-size:            56px;
+  --live-pill-height:    44px;   /* pílula de atividade ao vivo       */
+
+  /* ---- Raios mobile ------------------------------------------
+     One UI 9 é bem mais generoso que o desktop. Regra concêntrica:
+     raio interno = raio externo − padding do container.          */
+  --radius-sheet:  28px;
+  --radius-modal:  26px;
+  --radius-card-m: 20px;
+  --radius-row:    16px;
+  --radius-tap:    14px;  /* raio padrão de controle no mobile */
+
+  /* ---- Material: vidro (Liquid Glass, tingido de marca) ------
+     Só para chrome flutuante. Conteúdo permanece opaco.          */
+  --glass-blur:      24px;
+  --glass-blur-deep: 40px;  /* backdrop de context menu / long-press */
+  --glass-saturate:  180%;
+
+  --glass-sand:        rgba(251, 249, 244, 0.72);  /* chrome claro  */
+  --glass-sand-heavy:  rgba(251, 249, 244, 0.88);  /* sobre conteúdo denso */
+  --glass-petrol:      rgba(7, 56, 51, 0.62);      /* chrome escuro */
+  --glass-petrol-heavy:rgba(7, 56, 51, 0.84);
+
+  /* Fallbacks opacos — usados quando não há backdrop-filter ou
+     quando o usuário pediu menos transparência.                  */
+  --glass-fallback:        var(--sand-50);
+  --glass-fallback-brand:  var(--petrol-900);
+
+  /* Fio de luz especular no topo do vidro (o "highlight" do
+     Liquid Glass) e a sombra que o faz flutuar.                  */
+  --glass-hairline:    rgba(255, 255, 255, 0.42);
+  --glass-hairline-dim:rgba(255, 255, 255, 0.14);
+  --glass-shadow:      0 -1px 0 var(--glass-hairline) inset,
+                       0 8px 24px rgba(7, 56, 51, 0.12);
+  --glass-shadow-lift: 0 -1px 0 var(--glass-hairline) inset,
+                       0 12px 40px rgba(4, 32, 29, 0.20);
+
+  /* Scrim atrás de sheets / context menus */
+  --scrim-sheet: rgba(13, 23, 20, 0.42);
+  --scrim-menu:  rgba(13, 23, 20, 0.28);
+
+  /* ---- Movimento mobile --------------------------------------
+     Mobile pede física, não curva de UI. As duas linear() abaixo
+     são osciladores amortecidos calculados (não estimados):
+       --ease-spring  ζ=0.78  → 2% de overshoot (confiante, calmo)
+       --ease-settle  ζ=1.00  → criticamente amortecido, 0% overshoot
+     Cada uma declara um cubic-bezier antes como fallback para
+     navegadores sem linear().                                    */
+  --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --ease-spring: linear(0, 0.038, 0.129, 0.247, 0.374, 0.498, 0.611, 0.71, 0.792, 0.858, 0.91, 0.949, 0.977, 0.996, 1.008, 1.016, 1.019, 1.02, 1.019, 1.017, 1.015, 1.012, 1.01, 1.008, 1.006, 1.004, 1.003, 1.002, 1.001, 1);
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-settle: linear(0, 0.05, 0.159, 0.287, 0.414, 0.528, 0.627, 0.708, 0.775, 0.827, 0.868, 0.9, 0.925, 0.944, 0.958, 0.969, 0.977, 0.983, 0.987, 0.991, 0.993, 0.995, 0.996, 0.997, 1);
+
+  --dur-sheet:    380ms;  /* @kind other */
+  --dur-gesture:  240ms;  /* @kind other — retomada após soltar o dedo */
+  --dur-morph:    320ms;  /* @kind other — chrome que se transforma no scroll */
+
+  /* ---- Layout mobile ----------------------------------------- */
+  --pad-screen:  var(--space-4);  /* margem lateral da tela     */
+  /* Nao ha --pad-row, --gap-list nem --content-max-m.
+     Eram apelidos de um degrau da escala (--space-4, --space-2, 100%) sem um
+     unico consumidor: o ListItem escreve --space-3/--space-4 direto, porque o
+     padding dele tem dois eixos e varia por tamanho, e um apelido de valor
+     unico nao expressa isso. Apelido que nao e usado nao e vocabulario, e mais
+     um nome que o proximo a passar precisa aprender antes de descobrir que
+     nao serve. */
+}
+
+/* ============================================================
+   Utilitários da camada mobile
+   ============================================================ */
+
+/* ---- Vidro ------------------------------------------------
+   Uso: <div class="hv-glass"> (claro) / .hv-glass--brand (escuro).
+   Degrada sozinho para superfície opaca quando o navegador não
+   suporta backdrop-filter OU quando o usuário reduziu
+   transparência (acessibilidade, e também economia de bateria). */
+.hv-glass {
+  background: var(--glass-fallback);
+  box-shadow: var(--glass-shadow);
+}
+.hv-glass--brand {
+  background: var(--glass-fallback-brand);
+  color: var(--text-on-brand);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media (prefers-reduced-transparency: no-preference) {
+    .hv-glass {
+      background: var(--glass-sand);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    }
+    .hv-glass--heavy { background: var(--glass-sand-heavy); }
+    .hv-glass--brand {
+      background: var(--glass-petrol);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    }
+    .hv-glass--brand.hv-glass--heavy { background: var(--glass-petrol-heavy); }
+    .hv-glass--deep {
+      -webkit-backdrop-filter: blur(var(--glass-blur-deep)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(var(--glass-blur-deep)) saturate(var(--glass-saturate));
+    }
+  }
+}
+
+/* ---- Scroll edge effect (Liquid Glass) ---------------------
+   O conteúdo desaparece por baixo do chrome com um fade, em vez
+   de ser cortado por um divisor duro. Aplique no container que
+   rola, não no chrome.                                          */
+.hv-scroll-edge-top {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--space-4));
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--space-4));
+}
+.hv-scroll-edge-bottom {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 var(--space-6));
+  mask-image: linear-gradient(to top, transparent 0, #000 var(--space-6));
+}
+
+/* ---- Hit slop -----------------------------------------------
+   Aumenta a área tocável de um controle pequeno sem mudar o
+   visual dele. O elemento precisa ter position: relative.        */
+.hv-tap-slop { position: relative; }
+.hv-tap-slop::after {
+  content: ""; position: absolute; inset: 50% 50% 50% 50%;
+  width: var(--tap-min); height: var(--tap-min);
+  transform: translate(-50%, -50%); top: 50%; left: 50%;
+  inset: auto; pointer-events: auto;
+}
+
+/* ---- Safe areas ---------------------------------------------- */
+.hv-safe-top    { padding-top:    var(--safe-top); }
+.hv-safe-bottom { padding-bottom: var(--safe-bottom); }
+.hv-safe-x      { padding-left: var(--safe-left); padding-right: var(--safe-right); }
+
+/* ---- Comportamento de toque ---------------------------------- */
+.hv-tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Rolagem com inércia + contenção (evita "puxar a página inteira"
+   quando um sheet interno chega ao fim). */
+.hv-scroll-inertial {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Snap horizontal — carrosséis de StatCard, seletor de dias etc. */
+.hv-snap-x {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.hv-snap-x::-webkit-scrollbar { display: none; }
+.hv-snap-x > * { scroll-snap-align: start; flex: none; }
+
+/* ============================================================
+   Ajustes globais quando a plataforma é mobile
+   ------------------------------------------------------------
+   Ativado por media query E pelo atributo data-hv-platform que o
+   HVProvider escreve no <html> — o atributo permite forçar o modo
+   mobile no portal/preview sem redimensionar a janela.
+   ============================================================ */
+@media (max-width: 767px) {
+  :root {
+    --pad-page:    var(--space-4);
+    --pad-card:    var(--space-4);
+  }
+
+  /* iOS dá zoom no campo focado quando a fonte é < 16px.
+     Isso não é preferência: é bug de UX. */
+  input, textarea, select { font-size: max(16px, 1em); }
+}
+
+[data-hv-platform="mobile"] {
+  --pad-page:    var(--space-4);
+  --pad-card:    var(--space-4);
+}
+[data-hv-platform="mobile"] input,
+[data-hv-platform="mobile"] textarea,
+[data-hv-platform="mobile"] select { font-size: max(16px, 1em); }
+
+/* Sem hover em touch: qualquer coisa pendurada em :hover precisa
+   de um equivalente por toque (long-press, sheet, helper inline). */
+@media (hover: none) {
+  .hv-hover-only { display: none !important; }
+}

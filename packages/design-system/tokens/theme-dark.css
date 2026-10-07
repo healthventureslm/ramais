@@ -1,0 +1,283 @@
+/* ============================================================
+   Health Ventures — Tema escuro
+   ------------------------------------------------------------
+   Estratégia: em vez de reescrever os ~285 usos de token cru
+   espalhados pelos componentes, redefinimos as PRÓPRIAS RAMPAS
+   por PAPEL. Cada rampa já é semântica na prática:
+
+     sand-*   = superfícies      (50 elevado → 200 afundado)
+     ink-*    = texto e estrutura (900 forte → 100 borda sutil)
+     petrol-* = marca e ação
+     *-100    = fundo tingido  /  *-700 = texto sobre esse fundo
+
+   No escuro a ordem RELATIVA de cada rampa é preservada, só a
+   luminosidade absoluta inverte. Resultado: todo componente
+   existente escurece junto, sem tocar em uma linha de JSX.
+
+   O canvas escuro é um preto-verde QUENTE (#0F1917), nunca o
+   #121212 neutro — a marca sobrevive no escuro.
+
+   Ativação:
+     <html data-theme="dark">        → forçado
+     <html data-theme="light">       → forçado claro (vence o SO)
+     sem atributo                    → segue o sistema
+
+   Todos os pares de contraste abaixo foram medidos: texto normal
+   ≥ 4.5:1 e texto sutil ≥ 3:1 sobre a superfície de cartão.
+   ============================================================ */
+
+/* ---- Paleta escura, aplicada aos dois gatilhos ---------------
+   Especificidade (0,2,0) para vencer o :root de colors.css.
+
+   `.dark` é aceito como gatilho equivalente porque é o que Tailwind
+   (darkMode: "class") e a maioria dos ThemeContext já escrevem no <html>.
+   Sem isso, um app que alterna `class="dark"` põe `color-scheme: dark` no
+   documento — barra de rolagem, autofill e seletores nativos escurecem —
+   enquanto todo token continua resolvendo claro. O `:not([data-theme="light"])`
+   mantém a escolha explícita por claro vencendo o `.dark` herdado. */
+:root[data-theme="dark"],
+:root.dark:not([data-theme="light"]) {
+  /* ---- Superfícies: 50 elevado → 200 afundado (ordem preservada) */
+  --sand-50:  #16211E;   /* painel elevado      */
+  --sand-100: #0F1917;   /* canvas do app       */
+  --sand-200: #0A1211;   /* poço, trilho, hover afundado */
+  --sand-300: #22302B;   /* divisor             */
+  --sand-400: #2E3D38;   /* divisor forte       */
+
+  /* ---- Texto e estrutura: 900 forte → 100 borda sutil */
+  --ink-950: #F7FAF8;
+  --ink-900: #ECF2EF;   /* text-strong   13.8:1 */
+  --ink-800: #DEE6E2;
+  --ink-700: #C4D0CB;   /* text-body      9.8:1 */
+  --ink-600: #A6B3AE;
+  --ink-500: #8B9A94;   /* text-muted     5.3:1 */
+  --ink-400: #6F7E78;   /* text-subtle    3.7:1 */
+  --ink-300: #3C4A45;   /* border-strong        */
+  --ink-200: #2B3833;   /* border-default       */
+  --ink-100: #212D29;   /* border-subtle        */
+  /* --white NÃO inverte: continua sendo o branco de texto sobre
+     preenchimento colorido (tick de checkbox, ícone em avatar). */
+
+  /* ---- Petrol: os tons CLAROS viram texto, os 50/100 viram
+     preenchimento tingido escuro. O hue não muda. */
+  --petrol-950: #04201D;
+  --petrol-900: #073833;   /* chrome de marca segue profundo */
+  --petrol-800: #0C4B43;
+  --petrol-700: #5CBFAF;   /* usado como FG (link hover, info-fg) */
+  --petrol-600: #4FBCAB;   /* text-link           6.8:1 */
+  --petrol-500: #22A18E;   /* ação primária             */
+  --petrol-400: #6FCFBF;
+  --petrol-300: #93DDD0;
+  --petrol-200: #A9D8D0;   /* texto sobre marca — segue claro */
+  --petrol-100: #16403A;   /* preenchimento tingido     */
+  --petrol-50:  #10302C;   /* hover fantasma            */
+
+  /* ---- Sotaques: par -100 (fundo) / -700 (texto) inverte junto */
+  --emerald-700: #4FD1A0;  /* 7.7:1 sobre emerald-100 */
+  --emerald-600: #16B981;
+  --emerald-500: #2ECf94;
+  --emerald-100: #0E2E22;
+
+  --amber-700: #E9B45C;    /* 7.8:1 */
+  --amber-600: #E0A02A;
+  --amber-500: #EDB247;
+  --amber-100: #33260C;
+
+  --crimson-700: #F09084;  /* 6.7:1 */
+  --crimson-600: #C2483C;  /* fica escuro: é fundo de botão danger
+                              com texto branco (4.9:1) */
+  --crimson-500: #E4776B;
+  --crimson-100: #3A1A16;
+
+  /* Coral é assinatura de marca (LIVE/gravando): mantém o tom
+     exato para continuar reconhecível. 4.8:1 sobre cartão. */
+  --coral-700: #F5A08C;
+  --coral-600: #EE7A5E;
+  --coral-500: #E8674A;
+  --coral-400: #F08369;
+  --coral-100: #3A1E17;
+
+  /* ============================================================
+     Aliases semânticos que apontavam para --white e por isso não
+     são alcançados pela inversão das rampas.
+     ============================================================ */
+  --surface-card:   #1A2622;              /* cartões, sheets */
+  /* No escuro elevacao se le por LUZ, nao por sombra: a camada flutuante e um
+     degrau mais clara que o cartao. E um dos poucos overrides que sao de
+     natureza do tema, e nao sinal de token errado no claro — no claro a sombra
+     faz esse trabalho sozinha. */
+  --surface-float:  color-mix(in srgb, var(--surface-card) 90%, var(--text-strong));
+  --surface-canvas: var(--sand-100);
+  --surface-raised: var(--sand-50);
+  --surface-sunken: var(--sand-200);
+  --surface-brand:  var(--petrol-900);
+  --surface-brand-soft: var(--petrol-50);
+  --surface-overlay: rgba(0, 0, 0, 0.62);
+
+  --text-on-brand: var(--ink-900);
+  --text-inverse:  var(--ink-950);
+  --surface-inverse: #23312C;   /* elevada, nao invertida */
+  --text-on-inverse: var(--ink-900);   /* 11.97:1 sobre ela */
+
+  /* Ação primária: no escuro o verde clareia, então o texto por
+     cima precisa ser ESCURO. Branco sobre #22A18E dá só 3.20:1
+     (reprova); petrol-950 dá 5.33:1. Mesma convenção do One UI
+     e do Material 3 no escuro. */
+  --action-primary-text: var(--petrol-950);
+
+  /* O press seguia apontando para petrol-700, que no escuro é #5CBFAF —
+     a um passo imperceptível do hover (#4FBCAB). Resultado: apertar o
+     botão primário não devolvia nada no tema escuro.
+
+     No claro o estado ESCURECE a cada degrau; no escuro ele precisa
+     continuar CLAREANDO, na mesma direção do hover. petrol-400 é o
+     próximo degrau real. Texto petrol-950 por cima: 9,1:1. */
+  --action-primary-press: var(--petrol-400);
+
+  /* Sombras não funcionam no escuro (não há luz para bloquear):
+     a elevação passa a ser feita por SUPERFÍCIE mais clara +
+     um fio de luz na borda superior. */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.44),
+               0 2px 6px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.46),
+               0 6px 16px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.48),
+               0 16px 36px rgba(0, 0, 0, 0.44);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.52),
+               0 28px 60px rgba(0, 0, 0, 0.56);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-ring-inset: inset 0 0 0 var(--border-hair) rgba(0, 0, 0, 0.36);
+  --focus-ring-color: rgba(79, 188, 171, 0.42);   /* --shadow-focus deriva dela */
+
+
+  /* ---- Camada de estado: veu de luz, nao tinta -----------------------
+     No claro o hover ESCURECE (tinta de areia). No escuro precisa CLAREAR:
+     apontar para sand-100 aqui daria a propria cor do canvas e o hover
+     sumiria — que era o defeito dos botoes quiet/secondary. */
+  --state-hover: rgba(255, 255, 255, 0.07);
+  --state-press: rgba(255, 255, 255, 0.13);
+  --state-press-deep: rgba(255, 255, 255, 0.20);
+
+  /* Texto sobre tinta de marca: no escuro as tintas petrol-50/100 sao
+     ESCURAS, entao o texto por cima tem de clarear. */
+  --brand-soft-fg: #8AD5C7;
+
+  /* Um clarao de 65% sobre superficie escura vira farol. */
+  --shimmer: rgba(255, 255, 255, 0.06);
+
+  /* ---- Vidro escuro (camada mobile) ---------------------------
+     Tingido de petrol, não preto neutro. */
+  --glass-sand:         rgba(26, 38, 34, 0.72);
+  --glass-sand-heavy:   rgba(26, 38, 34, 0.90);
+  --glass-petrol:       rgba(7, 56, 51, 0.68);
+  --glass-petrol-heavy: rgba(7, 56, 51, 0.90);
+  --glass-fallback:       #1A2622;
+  --glass-fallback-brand: var(--petrol-900);
+  --glass-hairline:     rgba(255, 255, 255, 0.10);
+  --glass-hairline-dim: rgba(255, 255, 255, 0.05);
+  --glass-shadow:      0 -1px 0 var(--glass-hairline) inset,
+                       0 8px 24px rgba(0, 0, 0, 0.44);
+  --glass-shadow-lift: 0 -1px 0 var(--glass-hairline) inset,
+                       0 12px 40px rgba(0, 0, 0, 0.58);
+  --scrim-sheet: rgba(0, 0, 0, 0.56);
+  --scrim-menu:  rgba(0, 0, 0, 0.44);
+
+  /* Seleção de texto legível no escuro */
+  color-scheme: dark;
+}
+
+/* Barra de rolagem no escuro */
+:root[data-theme="dark"] ::selection,
+:root.dark:not([data-theme="light"]) ::selection {
+  background: var(--petrol-700);
+  color: var(--petrol-950);
+}
+
+/* ============================================================
+   Preferência do sistema — só quando não há escolha explícita.
+   O :not([data-theme="light"]) garante que um usuário que pediu
+   claro continue no claro mesmo com o SO no escuro.
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sand-50:  #16211E;
+    --sand-100: #0F1917;
+    --sand-200: #0A1211;
+    --sand-300: #22302B;
+    --sand-400: #2E3D38;
+
+    --ink-950: #F7FAF8;
+    --ink-900: #ECF2EF;
+    --ink-800: #DEE6E2;
+    --ink-700: #C4D0CB;
+    --ink-600: #A6B3AE;
+    --ink-500: #8B9A94;
+    --ink-400: #6F7E78;
+    --ink-300: #3C4A45;
+    --ink-200: #2B3833;
+    --ink-100: #212D29;
+
+    --petrol-700: #5CBFAF;
+    --petrol-600: #4FBCAB;
+    --petrol-500: #22A18E;
+    --petrol-400: #6FCFBF;
+    --petrol-300: #93DDD0;
+    --petrol-100: #16403A;
+    --petrol-50:  #10302C;
+
+    --emerald-700: #4FD1A0;
+    --emerald-600: #16B981;
+    --emerald-500: #2ECf94;
+    --emerald-100: #0E2E22;
+    --amber-700: #E9B45C;
+    --amber-600: #E0A02A;
+    --amber-500: #EDB247;
+    --amber-100: #33260C;
+    --crimson-700: #F09084;
+    --crimson-500: #E4776B;
+    --crimson-100: #3A1A16;
+    --coral-700: #F5A08C;
+    --coral-600: #EE7A5E;
+    --coral-100: #3A1E17;
+
+    --surface-card:   #1A2622;
+    --surface-float:  color-mix(in srgb, var(--surface-card) 90%, var(--text-strong));
+    --surface-overlay: rgba(0, 0, 0, 0.62);
+    --text-on-brand: var(--ink-900);
+    --text-inverse:  var(--ink-950);
+    --surface-inverse: #23312C;
+    --text-on-inverse: var(--ink-900);
+    --action-primary-text: var(--petrol-950);
+    --action-primary-press: var(--petrol-400);
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.40);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.44), 0 2px 6px rgba(0, 0, 0, 0.30);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.46), 0 6px 16px rgba(0, 0, 0, 0.36);
+    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.48), 0 16px 36px rgba(0, 0, 0, 0.44);
+    --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.52), 0 28px 60px rgba(0, 0, 0, 0.56);
+    --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.40);
+    --shadow-ring-inset: inset 0 0 0 var(--border-hair) rgba(0, 0, 0, 0.36);
+    --focus-ring-color: rgba(79, 188, 171, 0.42);   /* --shadow-focus deriva dela */
+
+    --state-hover: rgba(255, 255, 255, 0.07);
+    --state-press: rgba(255, 255, 255, 0.13);
+    --state-press-deep: rgba(255, 255, 255, 0.20);
+    --brand-soft-fg: #8AD5C7;
+    --shimmer: rgba(255, 255, 255, 0.06);
+
+    --glass-sand:         rgba(26, 38, 34, 0.72);
+    --glass-sand-heavy:   rgba(26, 38, 34, 0.90);
+    --glass-petrol:       rgba(7, 56, 51, 0.68);
+    --glass-petrol-heavy: rgba(7, 56, 51, 0.90);
+    --glass-fallback:       #1A2622;
+    --glass-hairline:     rgba(255, 255, 255, 0.10);
+    --glass-hairline-dim: rgba(255, 255, 255, 0.05);
+    --glass-shadow:      0 -1px 0 var(--glass-hairline) inset, 0 8px 24px rgba(0, 0, 0, 0.44);
+    --glass-shadow-lift: 0 -1px 0 var(--glass-hairline) inset, 0 12px 40px rgba(0, 0, 0, 0.58);
+    --scrim-sheet: rgba(0, 0, 0, 0.56);
+    --scrim-menu:  rgba(0, 0, 0, 0.44);
+
+    color-scheme: dark;
+  }
+}

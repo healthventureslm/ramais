@@ -1,0 +1,17 @@
+node_modules/
+dist/
+# Cópia versionada do design system (tools/sincronizar-ds.mjs): o build depende dela.
+!packages/design-system/dist/
+.turbo/
+.dev/
+.env
+*.log
+coverage/
+armazenamento-local/
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/google-services.json
+apps/mobile/GoogleService-Info.plist

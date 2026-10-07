@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+  - packages/verticals/*
+  - tools/*
+
+onlyBuiltDependencies:
+  - esbuild

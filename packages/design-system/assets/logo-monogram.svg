@@ -1,0 +1,33 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Health Ventures monogram">
+  <!--
+    O ladrilho é petrol-900 (#073833). Sobre o canvas escuro (#0F1917) isso dá
+    1.21:1 — o ladrilho some e sobram as barras da onda flutuando soltas.
+
+    Clarear o ladrilho NÃO resolve: qualquer tom claro o bastante para separar
+    do fundo (≥3:1) derruba o contraste das barras por cima dele para 1.8:1.
+    Medido. Então a correção é um ARO, que define a borda sem tocar no
+    preenchimento — as barras mantêm o contraste e o ladrilho reaparece.
+    Branco a 32% compõe #567874: 3.70:1 contra o canvas, 3.22:1 contra o cartão.
+
+    LIMITAÇÃO: este arquivo é carregado via <img src>, então é um documento
+    próprio — ele enxerga o prefers-color-scheme do SISTEMA, mas NÃO o
+    data-theme da página que o hospeda. Sob o toggle manual do portal o aro
+    não aparece. Para controle total, embuta o SVG inline no lugar de <img>.
+  -->
+  <style>
+    .hv-mark-rim { stroke: none; }
+    @media (prefers-color-scheme: dark) {
+      .hv-mark-rim { stroke: rgba(255, 255, 255, 0.32); stroke-width: 2; }
+    }
+  </style>
+
+  <rect class="hv-mark-rim" x="1" y="1" width="94" height="94" rx="21" fill="#073833"></rect>
+
+  <g shape-rendering="geometricPrecision">
+    <rect x="24" y="42" width="6" height="12" rx="3" fill="#A9D8D0"></rect>
+    <rect x="34" y="34" width="6" height="28" rx="3" fill="#6FBCB1"></rect>
+    <rect x="44" y="24" width="6" height="48" rx="3" fill="#E8674A"></rect>
+    <rect x="54" y="32" width="6" height="32" rx="3" fill="#6FBCB1"></rect>
+    <rect x="64" y="40" width="6" height="16" rx="3" fill="#A9D8D0"></rect>
+  </g>
+</svg>

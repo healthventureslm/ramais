@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Ramais Equipe",
+    "slug": "ramais-equipe",
+    "scheme": "ramais",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "br.com.ramais.equipe",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "br.com.ramais.equipe",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
+      },
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSCameraUsageDescription": "A câmera lê o QR de cadastro do celular do setor e tira fotos para os atendimentos."
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "A câmera lê o QR de cadastro do celular do setor e tira fotos para os atendimentos."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "O microfone grava mensagens de voz para a equipe e para os hóspedes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "As fotos escolhidas vão para a conversa com o hóspede ou com a equipe.",
+          "cameraPermission": "A câmera lê o QR de cadastro do celular do setor e tira fotos para os atendimentos."
+        }
+      ]
+    ]
+  }
+}

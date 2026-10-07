@@ -1,0 +1,49 @@
+/* ============================================================
+   Health Ventures — Spacing & layout tokens
+   ------------------------------------------------------------
+   4px base grid. Clinical UIs are dense; favour the smaller end
+   of the scale for in-app chrome and reserve large steps for
+   marketing surfaces.
+   ============================================================ */
+
+:root {
+  --space-0:  0;
+  --space-1:  0.25rem;  /* 4 */
+  --space-2:  0.5rem;   /* 8 */
+  --space-3:  0.75rem;  /* 12 */
+  --space-4:  1rem;     /* 16 */
+  --space-5:  1.25rem;  /* 20 */
+  --space-6:  1.5rem;   /* 24 */
+  --space-7:  2rem;     /* 32 */
+  --space-8:  2.5rem;   /* 40 */
+  --space-9:  3rem;     /* 48 */
+  --space-10: 4rem;     /* 64 */
+  --space-11: 5rem;     /* 80 */
+  --space-12: 6rem;     /* 96 */
+
+  /* ---- Ajuste óptico (DS-11) ------------------------------------
+     A grade de 4px governa LAYOUT. Alinhamento óptico não é layout: um
+     ícone de 20px ao lado de um rótulo de 13px quase nunca fica centrado
+     na grade, e a correção real é de 1 a 3px. Sem estes tokens o produto
+     escreve `mt-[2px]` e cai no linter de aderência como se fosse desleixo
+     — foram a maior parte dos avisos restantes na primeira migração de um
+     produto para o DS.
+
+     Use SÓ para alinhar glifo com texto. Espaçamento entre elementos
+     continua na escala; se você precisa de 2px de respiro, o respiro está
+     errado, não a escala. */
+  --nudge-1: 1px;
+  --nudge-2: 2px;
+  --nudge-3: 3px;
+
+  /* ---- Layout dimensions ---- */
+  --sidebar-width:        264px;
+  --sidebar-width-collapsed: 72px;
+  --header-height:        60px;
+  --content-max:          1240px;
+  --reading-max:          68ch;
+
+  /* ---- Container padding ---- */
+  --pad-card:    var(--space-5);
+  --pad-page:    var(--space-8);
+}

@@ -1,0 +1,17 @@
+/* ============================================================
+   Health Ventures — Design System
+   Root entry point. Consumers link THIS file only.
+   This file is a manifest of @import lines — no rules live here.
+   ============================================================ */
+
+@import url("tokens/fonts.css");
+@import url("tokens/colors.css");
+@import url("tokens/typography.css");
+@import url("tokens/spacing.css");
+@import url("tokens/elevation.css");
+@import url("tokens/motion.css");
+@import url("tokens/mobile.css");
+@import url("tokens/base.css");
+/* Tema escuro por último: redefine as rampas por papel e precisa
+   vencer tudo o que veio antes. */
+@import url("tokens/theme-dark.css");

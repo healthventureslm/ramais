@@ -1,0 +1,32 @@
+/* ============================================================
+   Ramais — Administração
+   Só o que o DS não cobre: abas que rolam no celular, colunas
+   de cartões e o bloco de lotação por setor. Só tokens do DS.
+   ============================================================ */
+
+/* As seis abas não cabem no celular: rolam na horizontal sem quebrar linha. */
+.admin-abas { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+.admin-abas::-webkit-scrollbar { display: none; }
+.admin-abas .hv-tab { flex: none; white-space: nowrap; }
+
+/* Cartões lado a lado que viram uma coluna quando não cabem. */
+.admin-colunas { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: start; }
+
+.admin-titulo { margin: 0; font: var(--weight-semibold) var(--text-lg) / 1.3 var(--font-display); color: var(--text-strong); }
+.admin-rotulo { font: var(--type-caption); font-weight: var(--weight-semibold); color: var(--text-strong); }
+.admin-texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Barra de ferramentas acima das listas: busca, contagem, ação. */
+.admin-barra { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+.admin-barra__busca { flex: 0 1 320px; min-width: 200px; }
+
+/* Lotação por setor dentro do formulário de pessoa. */
+.admin-lotacao { display: grid; gap: var(--space-2); padding: var(--space-3); border: var(--border-hair) solid var(--border-subtle); border-radius: var(--radius-md); }
+.admin-lotacao--marcada { background: var(--surface-sunken); }
+.admin-lotacao__campos { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding-left: var(--space-6); }
+.admin-lotacao__select { min-width: 170px; flex: 1 1 170px; }
+.admin-lotacao__numero { width: 88px; }
+
+/* QR na tela: precisa de fundo branco para a câmera ler, também no tema escuro. */
+.admin-qr { display: grid; justify-items: center; gap: var(--space-3); }
+.admin-qr img { background: var(--white); border-radius: var(--radius-md); padding: var(--space-2); }

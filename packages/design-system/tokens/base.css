@@ -1,0 +1,105 @@
+/* ============================================================
+   Health Ventures — Base layer
+   ------------------------------------------------------------
+   Light, opinionated resets + brand defaults applied to bare
+   elements: body canvas, selection colour, custom scrollbars,
+   focus-visible ring, and the .hv-scroll utility for inner
+   scroll regions. Component CSS-in-product can build on this.
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ---- Texto so para leitor de tela ---------------------------------
+   O DS nao tinha este utilitario, e sem ele nao ha como dar NOME a algo
+   que e visual por natureza — um grafico, o qualificador de um contador —
+   sem sujar a tela. `display: none` e `visibility: hidden` nao servem:
+   tiram o texto tambem da arvore de acessibilidade, que e justamente onde
+   ele precisa estar.
+
+   O `clip-path` com 1px e o retangulo colapsado sao o par que funciona em
+   todos os motores; `white-space: nowrap` evita que a linha quebre e volte
+   a ocupar altura. */
+.hv-vh {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font: var(--type-body);
+  color: var(--text-body);
+  background: var(--surface-canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--petrol-200);
+  color: var(--petrol-950);
+}
+
+/* Headings default to the display family */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  color: var(--text-strong);
+  letter-spacing: var(--tracking-snug);
+  margin: 0;
+}
+
+a { color: var(--text-link); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+:where(button, [role="button"]) { font-family: inherit; }
+
+/* Visible focus only for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ---- Custom scrollbars (calm, sand-tinted) ---- */
+.hv-scroll { scrollbar-width: thin; scrollbar-color: var(--ink-300) transparent; }
+.hv-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.hv-scroll::-webkit-scrollbar-track { background: transparent; }
+.hv-scroll::-webkit-scrollbar-thumb {
+  background: var(--ink-200);
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: content-box;
+}
+.hv-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-300); background-clip: content-box; }
+
+/* Scrollbar variant for dark/brand surfaces */
+.hv-scroll--brand { scrollbar-color: var(--petrol-700) transparent; }
+.hv-scroll--brand::-webkit-scrollbar-thumb { background: var(--petrol-700); background-clip: content-box; }
+
+/* ---- Link inline -------------------------------------------------------
+   O token --text-link existia sem nada que o aplicasse, entao o produto
+   escrevia style={{ color: "var(--text-link)" }} na mao. E utilitario e nao
+   componente de proposito: o app precisa poder usar o <Link> do proprio
+   router, ou um <a> comum, sem envolver em wrapper.
+
+       <Link to="/pacientes" className="hv-link">ver todos</Link>
+
+   O `a` cru ja tem esse tratamento pelo reset acima; a classe existe para
+   quando o elemento NAO e um <a> nativo. */
+.hv-link {
+  color: var(--text-link);
+  text-decoration: none;
+  border-radius: var(--radius-xs);
+  transition: var(--transition-colors);
+}
+.hv-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.hv-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.hv-link--quiet { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); }
+.hv-link--quiet:hover { color: var(--text-link); text-decoration-color: currentColor; }
+
+/* Sobrelinha em caixa alta — o rotulo pequeno tracked-out do sistema. */
+.hv-overline {
+  font: var(--weight-semibold) var(--text-2xs)/1 var(--font-sans);
+  letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted);
+}

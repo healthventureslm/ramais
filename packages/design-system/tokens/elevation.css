@@ -1,0 +1,90 @@
+/* ============================================================
+   Health Ventures — Elevation: radii, borders, shadows
+   ------------------------------------------------------------
+   Cards sit on warm sand, so shadows are soft, low-spread and
+   tinted with the deep petrol-green ink rather than pure black —
+   this keeps depth feeling warm and calm, never harsh. Corners
+   are gently rounded (clinical, not playful).
+   ============================================================ */
+
+:root {
+  /* ---- Radii ---- */
+  --radius-xs:  4px;
+  --radius-sm:  6px;
+  --radius-md:  9px;    /* default control radius */
+  --radius-lg:  12px;   /* cards */
+  --radius-xl:  16px;   /* sheets, large panels */
+  /* Nao ha --radius-2xl. 24px em card pequeno arredonda controle, campo e
+     cartao no mesmo blob, e o teto de forma deste sistema e o --radius-xl das
+     folhas. Estava declarado e sem um unico consumidor: um valor que o DS nao
+     quer, esperando alguem escrever var(--radius-2xl) e achar que era doutrina. */
+  --radius-pill: 999px;
+
+  /* ---- Border widths ---- */
+  --border-hair: 1px;
+  --border-thick: 1.5px;
+
+  /* ---- Shadows (petrol-tinted, soft) ---- */
+  --shadow-xs:  0 1px 2px rgba(7, 56, 51, 0.06);
+  --shadow-sm:  0 1px 2px rgba(7, 56, 51, 0.06),
+                0 2px 6px rgba(7, 56, 51, 0.05);
+  --shadow-md:  0 2px 4px rgba(7, 56, 51, 0.06),
+                0 6px 16px rgba(7, 56, 51, 0.08);
+  --shadow-lg:  0 4px 8px rgba(7, 56, 51, 0.06),
+                0 16px 36px rgba(7, 56, 51, 0.12);
+  --shadow-xl:  0 8px 16px rgba(4, 32, 29, 0.10),
+                0 28px 60px rgba(4, 32, 29, 0.18);
+
+  /* ---- Anel de foco: uma tinta, DUAS montagens ----------------------
+     Padrao: box-shadow. Segue o border-radius, nao ocupa espaco de layout
+     e compoe com outras sombras.
+
+     Excecao: onde o controle vive dentro de um ancestral com overflow — a
+     grade do Calendar, a trilha de atalhos do DatePicker — a sombra e
+     CORTADA na borda do container e o anel some pela metade. La ele vira
+     `outline` INSET. E inset sobre preenchimento exige tinta SOLIDA: um veu
+     translucido de petrol sobre uma celula ja petrol nao aparece.
+
+     Por isso sao duas larguras e duas tintas, e nao tres tratamentos por
+     acaso: fora do controle, 3px translucidos; dentro dele, 2px solidos. */
+  --focus-ring-w:       3px;
+  --focus-ring-color:   rgba(58, 162, 147, 0.35);
+  --shadow-focus:       0 0 0 var(--focus-ring-w) var(--focus-ring-color);
+  --focus-ring-inset-w: 2px;
+
+  /* ---- Anéis de foco por natureza da ação ---------------------------
+     O anel padrão é petrol porque a ação padrão é petrol. Num botão
+     destrutivo ele aparecia como um halo VERDE em volta de vermelho — a
+     única peça da tela dizendo "siga em frente" no controle que apaga.
+     E sobre superfície de marca (sidebar petrol, NavBar brand) o anel
+     petrol-sobre-petrol praticamente some.
+
+     Ambos são a mesma geometria do padrão: 3px sólidos, sem offset, para
+     que o foco tenha sempre a mesma FORMA e só mude de cor.
+
+     `-danger` não precisa de override no escuro: a tinta vem de
+     crimson-600, o degrau que o tema escuro mantém idêntico. */
+  --shadow-focus-danger:   0 0 0 var(--focus-ring-w) rgba(194, 72, 60, 0.45);
+  --shadow-focus-live:     0 0 0 var(--focus-ring-w) color-mix(in srgb, var(--live) 45%, transparent);
+  --shadow-focus-on-brand: 0 0 0 var(--focus-ring-w) rgba(255, 255, 255, 0.55);
+
+  /* Inset / inner well */
+  --shadow-inset: inset 0 1px 2px rgba(7, 56, 51, 0.08);
+
+  /* Fio POR DENTRO de uma forma preenchida — o caso e o Avatar, onde a
+     foto encosta na borda e precisa de um limite que nao seja um border
+     (que empurraria o conteudo). Nao e --shadow-xs: aquele e sombra
+     projetada, esta e contorno. */
+  --shadow-ring-inset: inset 0 0 0 var(--border-hair) rgba(7, 56, 51, 0.06);
+
+  /* ---- O glow da assinatura -------------------------------------------
+     Era a tinta cravada `rgba(232, 103, 74, 0.18)` — uma COPIA de --live que
+     ninguem atualizaria junto se a marca mexesse no coral. Agora deriva.
+
+     NAO tente parametrizar este token por uma variavel declarada aqui na
+     raiz: custom property com var() dentro e substituida no elemento ONDE E
+     DECLARADA, entao o valor ja desce resolvido e um override no filho nao
+     tem efeito. Quem precisa de outro tom redeclara o anel localmente — ver
+     --_ring no LiveActivity. */
+  --shadow-live: 0 0 0 4px color-mix(in srgb, var(--live) 18%, transparent);
+}
