@@ -6,6 +6,7 @@ import {
   ClienteOpenRouter,
   nomeDoIdioma,
   TradutorEmCadeia,
+  TradutorLLM,
   type Tradutor,
   type UsoIA,
   conferirNumeros,
@@ -286,5 +287,28 @@ describe('tradução com reserva', () => {
 
   it('se todos falham, o erro sobe (quem chama degrada: manda o original)', async () => {
     await expect(new TradutorEmCadeia([falha, falha]).traduzir('oi', 'en')).rejects.toThrow('429');
+  });
+});
+
+describe('idioma de origem da tradução', () => {
+  // O modelo devolve o texto igual (já está no destino) mas rotula a origem errado.
+  const modelo = (traducao: string, origem: string) =>
+    new ClienteOpenRouter({
+      apiKey: 'x',
+      fetch: (async () =>
+        new Response(JSON.stringify({ model: 'm', choices: [{ message: { content: JSON.stringify({ source_language: origem, translation: traducao }) } }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as unknown as typeof fetch,
+    });
+
+  it('texto devolvido igual: a origem é o próprio destino, diga o modelo o que disser', async () => {
+    const t = new TradutorLLM(modelo('Perfeito, e da piscina? Qual horário?', 'en'), 'm');
+    expect((await t.traduzir('Perfeito, e da piscina ? Qual horário?', 'pt')).idiomaOrigem).toBe('pt');
+  });
+
+  it('texto traduzido de verdade: vale a origem informada', async () => {
+    const t = new TradutorLLM(modelo('Perfect, and the pool? What time?', 'pt'), 'm');
+    expect((await t.traduzir('Perfeito, e da piscina ? Qual horário?', 'en')).idiomaOrigem).toBe('pt');
   });
 });

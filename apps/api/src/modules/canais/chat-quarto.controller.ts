@@ -141,9 +141,18 @@ export class ChatQuartoController {
           ORDER BY m.criado_em DESC, m.id DESC LIMIT 200`,
         [solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
       );
+      // O idioma da conversa (o último que a detecção firmou nesta estadia), para a tela segui-lo:
+      // celular em inglês com o hóspede escrevendo em português mostra a tela em português.
+      const conversa = await c.tx.client.query<{ idioma: string }>(
+        `SELECT so.idioma FROM solicitacao so JOIN solicitante st ON st.id = so.solicitante_id
+          WHERE st.telefone = $1 AND so.unidade_id = $2 AND so.criado_em >= $3 AND so.contexto->>'idiomaDefinido' = 'true'
+          ORDER BY so.criado_em DESC LIMIT 1`,
+        [solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
+      );
       const prefixo = `web.${s.id}.`;
       return {
         ...(await this.cabecalho(c, s.unidadeId, s.localId)),
+        idioma: conversa.rows[0]?.idioma ?? null,
         mensagens: r.rows.reverse().map((l) => {
           const hospede = l.autor_tipo === 'solicitante';
           // Para o hóspede, a fala da equipe aparece já traduzida (no áudio, a transcrição traduzida).

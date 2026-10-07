@@ -206,6 +206,8 @@ export interface ChatView {
   hotel: string;
   quarto: string;
   tipoLocal: string;
+  /** Idioma em que o hóspede está escrevendo (o da conversa), quando já se sabe. A tela o segue. */
+  idioma: string | null;
   mensagens: ChatMensagemView[];
 }
 

@@ -122,13 +122,21 @@ const TEXTOS = {
  * Idioma do celular do hóspede, qualquer um. PT/ES/EN vêm prontos; os outros começam em inglês e
  * a tela é traduzida pela API (uma vez por idioma; fica guardada neste navegador).
  */
-function idiomaDoNavegador(): string {
-  // ?lang=ja força um idioma (teste, demonstração); senão, o do celular.
+/** ?lang=ja força um idioma (teste, demonstração): a tela não segue mais a conversa. */
+function idiomaForcado(): string | null {
   const pedido = new URLSearchParams(window.location.search).get('lang');
-  const l = (pedido && /^[a-z]{2,3}([_-][a-z0-9]{2,8})?$/i.test(pedido) ? pedido : navigator.language || 'pt').toLowerCase().replace('_', '-');
+  return pedido && /^[a-z]{2,3}([_-][a-z0-9]{2,8})?$/i.test(pedido) ? pedido : null;
+}
+
+function normalizarIdioma(bruto: string): string {
+  const l = bruto.toLowerCase().replace('_', '-');
   const base = l.split('-')[0]!;
   // Chinês: simplificado e tradicional são escritas diferentes.
   return base === 'zh' ? l : base;
+}
+
+function idiomaDoNavegador(): string {
+  return normalizarIdioma(idiomaForcado() ?? (navigator.language || 'pt'));
 }
 const pronto = (l: string): l is Idioma => l === 'pt' || l === 'en' || l === 'es';
 
@@ -234,8 +242,13 @@ interface Pendente {
  * aqui, como no WhatsApp. Não precisa de conta nem de app. A conversa é a da estadia atual.
  */
 export function ChatQuarto({ codigo }: { codigo: string }) {
-  const [idioma] = useState(idiomaDoNavegador);
+  // Começa no idioma do celular; quando o hóspede escreve, a tela passa para o idioma da conversa
+  // (celular em inglês, conversa em português: tela em português).
+  const [idioma, setIdioma] = useState(idiomaDoNavegador);
   const [t, setT] = useState<Textos>(() => (pronto(idioma) ? TEXTOS[idioma] : (textosGuardados(idioma) ?? TEXTOS.en)));
+  useEffect(() => {
+    setT(pronto(idioma) ? TEXTOS[idioma] : (textosGuardados(idioma) ?? TEXTOS.en));
+  }, [idioma]);
   const token = useRef<string | null>(tokenSalvo(codigo));
   const [dados, setDados] = useState<ChatView | null>(null);
   const [invalido, setInvalido] = useState(false);
@@ -284,6 +297,11 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
     try {
       const v = await comSessao((tk) => chamar<ChatView>('GET', '/chat', tk));
       setDados(v);
+      if (v.idioma && !idiomaForcado()) {
+        const conversa = normalizarIdioma(v.idioma);
+        // zh-tw do celular e "zh" da conversa são o mesmo idioma: mantém a escrita do celular.
+        setIdioma((atual) => (atual.split('-')[0] === conversa.split('-')[0] ? atual : conversa));
+      }
       setOffline(false);
       // A bolha "enviando" sai quando a mensagem gravada chega.
       const gravadas = new Set(v.mensagens.map((m) => m.clienteId).filter(Boolean));

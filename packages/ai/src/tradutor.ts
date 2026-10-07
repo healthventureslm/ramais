@@ -78,9 +78,14 @@ export class TradutorLLM implements Tradutor {
     const j = lerJson(r.conteudo) as { source_language?: string; translation?: string };
     const traducao = (j.translation ?? '').trim();
     if (!traducao) throw new Error('tradução vazia');
+    // Texto devolvido igual = já estava no idioma de destino. O modelo erra o source_language
+    // justamente aí ("Perfeito, e da piscina? Qual horário?" → pt saía com origem "en", 4 em 4),
+    // e a conversa inteira passava a ser respondida em inglês. Igualdade não depende do modelo.
+    const so = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const inalterado = so(traducao) === so(texto) && /\p{L}/u.test(texto);
     return {
       texto: traducao,
-      idiomaOrigem: (j.source_language ?? o.de ?? detectarIdioma(texto).idioma).toLowerCase().slice(0, 2),
+      idiomaOrigem: inalterado ? para.toLowerCase().slice(0, 2) : (j.source_language ?? o.de ?? detectarIdioma(texto).idioma).toLowerCase().slice(0, 2),
       modelo: r.modelo,
       alerta: conferirNumeros(texto, traducao),
     };
