@@ -47,6 +47,15 @@ function usd(v: number | null): string {
 }
 
 /**
+ * Eixo dos gráficos do DS: a margem do rótulo é fixa (~5 caracteres) e "US$ 0,0010" vazava pela
+ * borda do cartão. Abaixo de US$ 1 o eixo vai em centavos de dólar; acima, em dólares.
+ */
+function usdCurto(maximo: number): (v: number) => string {
+  if (maximo < 1) return (v) => `${(v * 100).toLocaleString('pt-BR', { maximumFractionDigits: v * 100 < 1 ? 2 : 1 })}¢`;
+  return (v) => `$${v.toLocaleString('pt-BR', { maximumFractionDigits: maximo < 10 ? 1 : 0 })}`;
+}
+
+/**
  * Comparação com o período anterior. `menorMelhor`: tempo e custo, que melhoram caindo.
  * Sem base anterior, não mostra tendência (não inventa "+100%").
  */
@@ -482,9 +491,16 @@ function Conteudo({ r }: { r: Dados }) {
 
       {r.porDia.length > 1 && r.porDia.some((d) => d.custo > 0) && (
         <Card>
-          <CardHeader title="Custo da IA por dia" />
+          <CardHeader
+            title="Custo da IA por dia"
+            subtitle={Math.max(...r.porDia.map((d) => d.custo)) < 1 ? 'Em centavos de dólar (¢)' : 'Em dólares'}
+          />
           <CardBody>
-            <BarChart height={180} data={r.porDia.map((d) => ({ label: diaCurto(d.dia), value: d.custo }))} formatValue={usd} />
+            <BarChart
+              height={180}
+              data={r.porDia.map((d) => ({ label: diaCurto(d.dia), value: d.custo }))}
+              formatValue={usdCurto(Math.max(...r.porDia.map((d) => d.custo)))}
+            />
           </CardBody>
         </Card>
       )}

@@ -17,7 +17,10 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 /* ---------- Casca ---------- */
 .casca { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; height: 100dvh; }
 .casca__miolo { min-height: 0; overflow: hidden; display: grid; }
-.rolagem { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+/* scrollbar-gutter: a faixa da barra de rolagem existe sempre. Sem ela, a página curta (sem barra)
+   e a comprida (com barra) centralizavam o conteúdo em lugares diferentes: tudo andava ~7px de lado
+   ao trocar de tela. */
+.rolagem { overflow-y: auto; min-height: 0; overscroll-behavior: contain; scrollbar-gutter: stable; }
 @media (max-width: 767px) {
   .casca { grid-template-rows: auto minmax(0, 1fr); }
   .casca__miolo { padding-bottom: var(--tabbar-total); }
@@ -51,7 +54,7 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 .atendimentos { display: grid; grid-template-columns: 360px minmax(0, 1fr) 320px; min-height: 0; height: 100%; }
 .atendimentos__lista { min-height: 0; overflow-y: auto; background: var(--surface-card); border-right: var(--border-hair) solid var(--border-subtle); }
 .atendimentos__lista-topo { position: sticky; top: 0; z-index: 2; background: var(--surface-card); padding: var(--space-3) var(--space-3) 0; display: grid; gap: var(--space-3); }
-.atendimentos__detalhes { min-height: 0; overflow-y: auto; background: var(--surface-raised); border-left: var(--border-hair) solid var(--border-subtle); padding: var(--space-4); display: grid; gap: var(--space-4); align-content: start; }
+.atendimentos__detalhes { min-height: 0; overflow-y: auto; background: var(--surface-raised); border-left: var(--border-hair) solid var(--border-subtle); padding: var(--space-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-content: start; }
 .atendimentos__vazio { display: grid; place-items: center; padding: var(--space-7); }
 
 .conversa { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; background: var(--surface-canvas); }
@@ -85,7 +88,8 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 .pares { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-4); font: var(--type-body-sm); }
 .pares dt { color: var(--text-muted); }
 .pares dd { margin: 0; color: var(--text-strong); min-width: 0; overflow-wrap: anywhere; }
-.pilha { display: grid; gap: var(--space-2); }
+/* minmax(0, 1fr): o filho largo (tabela) rola dentro do cartão em vez de alargar a pilha. */
+.pilha { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 .pilha--larga { gap: var(--space-4); }
 .linha { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .espaco { flex: 1; }
@@ -154,11 +158,21 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 .zap__campo:focus-within { box-shadow: var(--zap-sombra), 0 0 0 2px var(--focus-ring-color); }
 .zap__rodape .zap__redondo { flex: none; width: 48px; height: 48px; border-radius: 50%; }
 
+/* ---------- Correções do design system (a levar para o DS) ---------- */
+/* Coluna numérica: `.hv-table thead th { text-align: left }` vence `.hv-th--num { text-align: right }`
+   no DS, então o número ficava à direita e o título à esquerda, sem um em cima do outro. */
+.hv-table thead th.hv-th--num { text-align: right; }
+/* Cartão de número: valor e selo de variação numa linha que não quebrava; em cartão estreito
+   ("US$ 0,00 −100% vs. anterior") vazava pela borda. */
+.hv-statcard__valuerow { flex-wrap: wrap; row-gap: var(--space-1); min-width: 0; }
+
 /* ---------- Dashboard ---------- */
 .dash-roscas { display: flex; flex-wrap: wrap; gap: var(--space-6); justify-content: space-around; margin-bottom: var(--space-4); }
 
 /* ---------- Páginas (painel, mensagens, administração, jornada) ---------- */
-.pagina { padding: var(--pad-page); display: grid; gap: var(--space-6); align-content: start; max-width: var(--content-max); margin: 0 auto; width: 100%; box-sizing: border-box; }
+/* minmax(0, 1fr): sem isso a coluna da grade cresce até caber o filho mais largo (uma tabela de
+   7 colunas no tablet), e a página inteira passava da tela. Assim a tabela rola dentro do cartão. */
+.pagina { padding: var(--pad-page); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-content: start; max-width: var(--content-max); margin: 0 auto; width: 100%; box-sizing: border-box; }
 .pagina--larga { max-width: none; }
 .grade-cartoes { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .grade-2 { display: grid; gap: var(--space-6); grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }

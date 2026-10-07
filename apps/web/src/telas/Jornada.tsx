@@ -100,11 +100,19 @@ export function Jornada({ unidadeId, abaExtra }: { unidadeId: string; abaExtra?:
     }, 500);
   }, [rascunho, alterado, unidadeId]);
 
+  // Carregando: a mesma casca da tela pronta, com o título no lugar definitivo.
   if (!rascunho) {
     return (
-      <div className="rolagem">
-        <div className="pagina">
-          <EmptyState loading title="Carregando a jornada" />
+      <div className="jornada">
+        <div className="jornada__faixa">
+          <div className="jornada__topo">
+            <PageHeader title="Jornada" subtitle="Carregando…" />
+          </div>
+        </div>
+        <div className="rolagem">
+          <div className="pagina">
+            <EmptyState loading title="Carregando a jornada" />
+          </div>
         </div>
       </div>
     );
@@ -125,50 +133,52 @@ export function Jornada({ unidadeId, abaExtra }: { unidadeId: string; abaExtra?:
 
   return (
     <div className="jornada">
-      <div className="jornada__topo">
-        <PageHeader
-          title="Jornada"
-          subtitle={subtitulo}
-          actions={
-            <div className="linha">
-              {validacao && !validacao.valido && <Badge variant="danger">{validacao.erros.length} erro(s)</Badge>}
-              {validacao?.valido && alterado && <Badge variant="positive">pronto para publicar</Badge>}
-              <Button
-                variant="secondary"
-                iconLeft={testando ? <X /> : <FlaskConical />}
-                aria-pressed={testando}
-                disabled={!validacao?.valido && alterado}
-                onClick={() => setTestando((t) => !t)}
-              >
-                {testando ? 'Fechar teste' : 'Testar como hóspede'}
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={!alterado}
-                onClick={async () => {
-                  const ok = await confirmar({
-                    title: 'Descartar as alterações do rascunho?',
-                    description: 'O rascunho volta a ser igual à versão publicada.',
-                    confirmLabel: 'Descartar',
-                    danger: true,
-                  });
-                  if (ok) setRascunho(JSON.parse(base) as ConfigUnidade);
-                }}
-              >
-                Descartar
-              </Button>
-              <Button disabled={!alterado || !validacao?.valido} onClick={() => setPublicando(true)}>
-                Publicar
-              </Button>
-            </div>
-          }
-        />
-        <div className="jornada__abas">
-          <Tabs
-            value={aba}
-            onChange={setAba}
-            items={[...(abaExtra ? [abaExtra] : []), ...ABAS].map((a) => ({ value: a.id, label: a.nome }))}
+      <div className="jornada__faixa">
+        <div className="jornada__topo">
+          <PageHeader
+            title="Jornada"
+            subtitle={subtitulo}
+            actions={
+              <div className="linha">
+                {validacao && !validacao.valido && <Badge variant="danger">{validacao.erros.length} erro(s)</Badge>}
+                {validacao?.valido && alterado && <Badge variant="positive">pronto para publicar</Badge>}
+                <Button
+                  variant="secondary"
+                  iconLeft={testando ? <X /> : <FlaskConical />}
+                  aria-pressed={testando}
+                  disabled={!validacao?.valido && alterado}
+                  onClick={() => setTestando((t) => !t)}
+                >
+                  {testando ? 'Fechar teste' : 'Testar como hóspede'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={!alterado}
+                  onClick={async () => {
+                    const ok = await confirmar({
+                      title: 'Descartar as alterações do rascunho?',
+                      description: 'O rascunho volta a ser igual à versão publicada.',
+                      confirmLabel: 'Descartar',
+                      danger: true,
+                    });
+                    if (ok) setRascunho(JSON.parse(base) as ConfigUnidade);
+                  }}
+                >
+                  Descartar
+                </Button>
+                <Button disabled={!alterado || !validacao?.valido} onClick={() => setPublicando(true)}>
+                  Publicar
+                </Button>
+              </div>
+            }
           />
+          <div className="jornada__abas">
+            <Tabs
+              value={aba}
+              onChange={setAba}
+              items={[...(abaExtra ? [abaExtra] : []), ...ABAS].map((a) => ({ value: a.id, label: a.nome }))}
+            />
+          </div>
         </div>
       </div>
 

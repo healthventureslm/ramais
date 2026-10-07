@@ -91,6 +91,24 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
   }, []);
   useEffect(recarregarEu, [recarregarEu]);
 
+  // As telas sob demanda já descem logo depois da entrada, com o navegador ocioso: abrir Dashboard,
+  // Jornada ou Administração pela primeira vez não passa mais pelo "carregando" no meio da tela,
+  // que depois pulava para o conteúdo. Quem não tem acesso a elas não baixa nada.
+  useEffect(() => {
+    const gestao = sessao.pessoa.admin || sessao.pessoa.gerente;
+    if (!gestao) return;
+    const baixar = () => {
+      void import('./telas/Dashboard');
+      if (sessao.pessoa.admin) {
+        void import('./telas/Jornada');
+        void import('./telas/Admin');
+      }
+    };
+    const ocioso = (window as { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
+    if (ocioso) ocioso(baixar);
+    else setTimeout(baixar, 1500);
+  }, [sessao.pessoa.admin, sessao.pessoa.gerente]);
+
   useEvento('aviso', (p) => avisar(p.texto));
   useEvento('direta:nova', (p) => {
     if (tela !== 'diretas') setDiretasNovas((n) => n + 1);

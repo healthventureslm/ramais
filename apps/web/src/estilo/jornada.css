@@ -8,9 +8,13 @@
 
 /* ---------- Casca: topo fixo, corpo rola ---------- */
 .jornada { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: 100%; }
+/* A faixa do topo reserva a mesma calha de barra de rolagem que o corpo (.rolagem): sem ela, o
+   título da Jornada ficava ~7px fora do lugar em relação ao das outras telas. */
+.jornada__faixa { overflow: hidden; scrollbar-gutter: stable; }
 .jornada__topo {
   width: 100%; max-width: var(--content-max); margin: 0 auto; box-sizing: border-box;
-  padding: var(--space-6) var(--pad-page) 0; display: grid; gap: var(--space-3);
+  /* Mesmo recuo de cima de .pagina: o título fica na mesma altura em todas as telas. */
+  padding: var(--pad-page) var(--pad-page) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3);
 }
 .jornada__abas { overflow-x: auto; overscroll-behavior-x: contain; }
 .jornada .pagina { padding-top: var(--space-5); }

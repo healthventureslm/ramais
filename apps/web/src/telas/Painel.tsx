@@ -82,17 +82,19 @@ export function Painel({ sessao, unidadeId, aoAbrir }: { sessao: Sessao; unidade
     }
   }
 
-  if (erro) {
+  // Carregando e erro usam a mesma casca da página pronta: o título não pula quando os dados chegam.
+  const cabecalho = <PageHeader title="Painel" subtitle="Quem está esperando a equipe agora. Atualiza sozinho." />;
+  if (erro || !dados) {
     return (
-      <div className="pagina">
-        <Banner variant="danger" title="Não deu para carregar o painel" description={erro} actions={<Button size="sm" onClick={carregar}>Tentar de novo</Button>} />
-      </div>
-    );
-  }
-  if (!dados) {
-    return (
-      <div className="pagina">
-        <EmptyState loading />
+      <div className="rolagem">
+        <div className="pagina">
+          {cabecalho}
+          {erro ? (
+            <Banner variant="danger" title="Não deu para carregar o painel" description={erro} actions={<Button size="sm" onClick={carregar}>Tentar de novo</Button>} />
+          ) : (
+            <EmptyState loading />
+          )}
+        </div>
       </div>
     );
   }
@@ -104,7 +106,7 @@ export function Painel({ sessao, unidadeId, aoAbrir }: { sessao: Sessao; unidade
   return (
     <div className="rolagem">
       <div className="pagina">
-        <PageHeader title="Painel" subtitle="Quem está esperando a equipe agora. Atualiza sozinho." />
+        {cabecalho}
 
         <div className="grade-cartoes">
           <StatCard icon={<Hourglass />} label="Na fila" value={naFila} hint="pedidos sem ninguém" accent="petrol" />
