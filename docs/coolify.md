@@ -44,7 +44,7 @@ Repositório: `healthventureslm/ramais`, branch `docker` (ou `main`, depois de j
 
 As portas vêm do compose (`TAILNET_IP` e `API_PORT`, com defaults `100.100.212.18` e `3406`). Não preencha "Ports mappings".
 
-**Environment Variables.** Desmarque "Build Variable" em todas. **Não crie `NODE_ENV`.** Gere as senhas com `openssl rand -hex 24`. Use hexadecimal, porque as senhas entram numa URL `postgres://…` e símbolos a quebram.
+**Environment Variables.** Nos segredos (`DB_SENHA_*`, `JWT_SEGREDO`, `META_*` com segredo, `OPENROUTER_API_KEY`), deixe **só Runtime** e desmarque Buildtime. O build não precisa de nenhuma variável. A falta de um segredo é barrada na subida: o Postgres não inicia, a migração para com a mensagem `defina DB_SENHA_OWNER e DB_SENHA_APP…`, ou a api recusa a configuração. **Não crie `NODE_ENV`.** Gere as senhas com `openssl rand -hex 24`. Use hexadecimal, porque as senhas entram numa URL `postgres://…` e símbolos a quebram.
 
 | Variável | Valor |
 |---|---|
