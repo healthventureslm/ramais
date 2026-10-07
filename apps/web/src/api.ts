@@ -9,10 +9,10 @@ import type {
   TransferirReq,
 } from '@ramais/contracts';
 
-// Em desenvolvimento, a API vem pela mesma origem (proxy do Vite em /api): funciona igual em
-// localhost e por um túnel (ngrok) no celular. Fora disso, VITE_API_URL.
-export const API =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? `${window.location.origin}/api` : 'http://localhost:3000');
+// A API sempre vem pela mesma origem, em /api: no desenvolvimento pelo proxy do Vite, em produção
+// pelo nginx do contêiner web. Um build serve qualquer ambiente (localhost, túnel, domínio) e
+// o navegador não precisa de CORS.
+export const API = `${window.location.origin}/api`;
 
 const CHAVE = 'ramais.sessao';
 

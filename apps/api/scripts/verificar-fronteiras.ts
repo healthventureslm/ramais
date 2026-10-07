@@ -21,6 +21,7 @@ const PERMITIDO: Record<string, string[]> = {
   diretas: [],
   admin: ['equipes'],
   dev: [],
+  saude: [],
 };
 const LIVRES = new Set(['infra', 'config']);
 const ORQUESTRADORES = new Set(['worker', 'modulos', 'main.api', 'main.worker']);

@@ -25,6 +25,7 @@ import { Orquestrador } from './modules/jornada/orquestrador.js';
 import { Acoes } from './modules/solicitacoes/acoes.js';
 import { Comandos } from './modules/solicitacoes/comandos.js';
 import { Consultas } from './modules/solicitacoes/consultas.js';
+import { SaudeController } from './modules/saude/saude.controller.js';
 import { SolicitacoesController } from './modules/solicitacoes/solicitacoes.controller.js';
 import { Processadores } from './worker/processadores.js';
 
@@ -46,6 +47,7 @@ const SERVICOS = [Acoes, Comandos, Consultas, Distribuicao, Escalonamento, Prese
     LocaisController,
     RelatorioController,
     DevController,
+    SaudeController,
   ],
   providers: [
     ...SERVICOS,

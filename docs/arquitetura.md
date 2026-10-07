@@ -51,6 +51,7 @@ da seção 6, então o construtor futuro será só um editor desse JSON.
 | App da equipe | Expo em build de desenvolvimento, `@react-native-firebase/messaging` + Notifee |
 | IA | OpenRouter (roteamento, tradução, base de conhecimento, multimodal) |
 | Hospedagem | AWS sa-east-1: ECS Fargate, RDS Postgres, S3, CloudFront |
+| Empacotamento | Docker, uma imagem por app: `apps/api` (contêineres `api` e `worker`, mais o alvo `migracao`) e `apps/web` (nginx, repassa `/api` e `/tempo-real`). `docker-compose.yml` sobe tudo junto, com Postgres 18 (a mesma versão do desenvolvimento local) |
 
 Infraestrutura: só Postgres e S3, sem Redis.
 

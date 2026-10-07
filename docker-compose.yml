@@ -1,0 +1,136 @@
+# Ramais inteiro em contêineres, cada parte isolada:
+#
+#   banco      Postgres 18 (volume `banco`)
+#   migracao   cria papéis/banco e aplica as migrações; roda e sai
+#   api        apps/api, main.api.js — REST, webhook da Meta, WebSocket (sem porta publicada)
+#   worker     apps/api, main.worker.js — filas: IA, envio, mídia (mesma imagem da api)
+#   web        apps/web — nginx com o build do Vite; repassa /api e /tempo-real para a api
+#
+# Subir:            docker compose up -d --build        → http://localhost:8080
+# Dados de teste:   docker compose --profile seed run --rm seed
+# Logs:             docker compose logs -f api worker
+#
+# O ambiente vem do mesmo .env do desenvolvimento (chave da OpenRouter, Meta, JWT). O que muda
+# dentro da rede do compose (endereços do banco, pasta de mídia, origem da web) está fixado
+# abaixo em `environment`, que tem precedência sobre o env_file.
+#
+# Senhas do banco: os defaults abaixo são só para a máquina local. Em qualquer outro lugar,
+# defina DB_SENHA_ADMIN, DB_SENHA_OWNER e DB_SENHA_APP no .env.
+
+name: ramais
+
+x-banco: &banco-urls
+  DATABASE_URL: postgres://ramais_app:${DB_SENHA_APP:-ramais-app-local}@banco:5432/ramais
+  DATABASE_URL_OWNER: postgres://ramais_owner:${DB_SENHA_OWNER:-ramais-owner-local}@banco:5432/ramais
+
+x-imagem-api: &imagem-api
+  context: .
+  dockerfile: apps/api/Dockerfile
+  args:
+    GIT_COMMIT: ${GIT_COMMIT:-}
+
+services:
+  banco:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_SENHA_ADMIN:-ramais-admin-local}
+    volumes:
+      # Postgres 18 guarda os dados em /var/lib/postgresql/18/docker: o volume vai no pai.
+      - banco:/var/lib/postgresql
+    # Só na máquina local, para inspecionar com psql. A 5544 é a do Postgres de desenvolvimento.
+    ports:
+      - "127.0.0.1:${BANCO_PORTA:-5545}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migracao:
+    build:
+      <<: *imagem-api
+      target: migracao
+    image: ramais-migracao:local
+    environment:
+      <<: *banco-urls
+      DATABASE_URL_ADMIN: postgres://postgres:${DB_SENHA_ADMIN:-ramais-admin-local}@banco:5432/postgres
+      DB_SENHA_OWNER: ${DB_SENHA_OWNER:-ramais-owner-local}
+      DB_SENHA_APP: ${DB_SENHA_APP:-ramais-app-local}
+    depends_on:
+      banco:
+        condition: service_healthy
+    restart: "no"
+
+  # Dados de demonstração (hotel, equipe, logins de dev). Só sob demanda, nunca em produção.
+  seed:
+    profiles: [seed]
+    image: ramais-migracao:local
+    command: ["pnpm", "db:seed"]
+    environment:
+      <<: *banco-urls
+    depends_on:
+      migracao:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      <<: *imagem-api
+      target: api
+    image: ramais-api:local
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment: &ambiente-api
+      <<: *banco-urls
+      PORTA: "3000"
+      WEB_ORIGEM: http://localhost:${WEB_PORTA:-8080}
+      ARMAZENAMENTO_DIR: /dados/armazenamento
+    volumes:
+      - armazenamento:/dados/armazenamento
+    depends_on:
+      migracao:
+        condition: service_completed_successfully
+
+  worker:
+    # Mesma imagem da api, outro processo. O build é o mesmo (cache), só o comando muda.
+    build:
+      <<: *imagem-api
+      target: api
+    image: ramais-api:local
+    restart: unless-stopped
+    command: ["node", "--enable-source-maps", "dist/main.worker.js"]
+    env_file:
+      - path: .env
+        required: false
+    environment: *ambiente-api
+    volumes:
+      - armazenamento:/dados/armazenamento
+    # Sem HTTP: o healthcheck da imagem (GET /saude) não se aplica.
+    healthcheck:
+      disable: true
+    depends_on:
+      migracao:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
+    image: ramais-web:local
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      - "${WEB_PORTA:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  banco:
+  # Fotos e áudios (ARMAZENAMENTO=local), compartilhados entre api e worker.
+  armazenamento:

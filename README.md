@@ -195,6 +195,35 @@ Enquanto o túnel estiver aberto, qualquer pessoa com o link chega à tela de lo
 pnpm db:reset
 ```
 
+## Rodar com Docker
+
+Cada parte num contêiner, como vai para produção. Precisa do Docker Desktop e do mesmo `.env` do desenvolvimento (chave da OpenRouter, Meta, JWT).
+
+```bash
+docker compose up -d --build
+```
+
+Abra `http://localhost:8080`. Na primeira vez, carregue os dados de demonstração (hotel, equipe e logins de dev):
+
+```bash
+docker compose --profile seed run --rm seed
+```
+
+| Serviço | Imagem | O que faz |
+|---|---|---|
+| `banco` | `postgres:18-alpine` | Postgres, volume `banco`. Publicado só em `127.0.0.1:5545`, para o psql. |
+| `migracao` | `apps/api/Dockerfile`, alvo `migracao` | Cria papéis e banco, aplica as migrações e sai. A api só sobe depois dele. |
+| `api` | `apps/api/Dockerfile` | `main.api.js`: REST, webhook da Meta, WebSocket. Sem porta publicada. |
+| `worker` | a mesma da api | `main.worker.js`: filas (IA, envio, mídia). |
+| `web` | `apps/web/Dockerfile` | nginx com o build do Vite. Repassa `/api` e `/tempo-real` para a api. |
+
+- A web chama a API pela própria origem (`/api`), em desenvolvimento e em produção: um build serve qualquer domínio e não há CORS.
+- Fotos e áudios ficam no volume `armazenamento`, compartilhado entre api e worker (`ARMAZENAMENTO=local`). Em produção, prefira `s3`.
+- As senhas do banco têm default só para a máquina local. Fora dela, defina `DB_SENHA_ADMIN`, `DB_SENHA_OWNER` e `DB_SENHA_APP` no `.env`.
+- Túnel: `ngrok http 8080`. Atrás de um proxy HTTPS, defina `WEB_URL_PUBLICA` para o QR do quarto sair com o domínio certo.
+- Saúde: `GET /api/saude` (a API e o banco respondem) e `/version.txt` (commit do build da web, via `GIT_COMMIT`).
+- Logs: `docker compose logs -f api worker`. Parar: `docker compose down` (os volumes ficam; `down -v` apaga o banco).
+
 ## Testes
 
 ```bash

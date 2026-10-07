@@ -1,0 +1,23 @@
+# Contexto de build = raiz do repositório. O `turbo prune` dentro da imagem escolhe o que cada
+# app usa; aqui sai o que nunca deve entrar em imagem nenhuma.
+**/node_modules
+**/dist
+# Exceção: a cópia versionada do design system (tools/sincronizar-ds.mjs) é o próprio pacote.
+!packages/design-system/dist
+**/.turbo
+**/coverage
+**/*.log
+.git
+.dev
+.claude
+
+# NUNCA copiar segredos para a imagem: o ambiente vem do orquestrador (env_file no compose).
+**/.env
+**/.env.*
+!.env.example
+
+# Mídia salva em disco no desenvolvimento.
+**/armazenamento-local
+
+# O app móvel é construído pelo Expo/EAS, não por Docker.
+apps/mobile

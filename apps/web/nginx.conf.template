@@ -1,0 +1,105 @@
+# Serve os estáticos do Vite e repassa /api e /tempo-real para a API.
+#
+# É um TEMPLATE: a imagem oficial do nginx roda `envsubst` sobre /etc/nginx/templates/*.template
+# na subida e grava o resultado em /etc/nginx/conf.d/. Assim a API muda de lugar sem rebuild.
+#
+# Variáveis (com default no Dockerfile):
+#   API_UPSTREAM   origem da API, SEM barra no fim. Ex.: http://api:3000 (mesma rede do compose).
+#   CSP_HEADER     `Content-Security-Policy` aplica; `Content-Security-Policy-Report-Only` só
+#                  avisa no console. Se a CSP quebrar algo, trocar e reiniciar, sem rebuild.
+#   TRUSTED_PROXY  de onde vem o proxy HTTPS (Caddy, ngrok, balanceador). Só dele o nginx aceita
+#                  X-Forwarded-For e X-Forwarded-Proto.
+#
+# A API não precisa estar exposta na internet: só este nginx fala com ela.
+
+# Protocolo que o usuário usou. Atrás do proxy HTTPS o nginx recebe http, mas o link do QR do
+# quarto precisa sair https: repassa o X-Forwarded-Proto que veio, ou o próprio esquema.
+# Em produção, defina WEB_URL_PUBLICA na API: aí o link não depende de cabeçalho nenhum.
+map $http_x_forwarded_proto $proto_origem {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
+# Host que o usuário usou, COM a porta (localhost:8080). `$host` perde a porta e o QR sairia
+# http://localhost/q/... Atrás de um proxy que já mande X-Forwarded-Host, vale o dele.
+map $http_x_forwarded_host $host_origem {
+    default $http_x_forwarded_host;
+    ''      $http_host;
+}
+
+# WebSocket do tempo real: Upgrade só quando o cliente pediu.
+map $http_upgrade $conexao {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # IP real do usuário, para os logs e limites da API.
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from ${TRUSTED_PROXY};
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
+    server_tokens off;
+
+    # `add_header` num location APAGA os do server: por isso o include se repete.
+    include /etc/nginx/conf.d/seguranca.inc;
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        include /etc/nginx/conf.d/seguranca.inc;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+        include /etc/nginx/conf.d/seguranca.inc;
+    }
+
+    location /api/ {
+        # COM barra no fim, de propósito: o nginx corta o /api e a API recebe /chat/sessao,
+        # /webhook/... — as rotas dela não têm prefixo (é o mesmo que o proxy do Vite faz).
+        # Sem a barra, tudo volta 404.
+        proxy_pass ${API_UPSTREAM}/;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # A API monta o link do QR do quarto com estes dois (se WEB_URL_PUBLICA estiver vazia).
+        proxy_set_header X-Forwarded-Host $host_origem;
+        proxy_set_header X-Forwarded-Proto $proto_origem;
+        proxy_set_header Connection "";
+
+        # Foto e áudio vão em base64 (até 10 MB de arquivo, ~14 MB no corpo). A API aceita 16 MB.
+        client_max_body_size 16m;
+        proxy_read_timeout 120s;
+    }
+
+    location /tempo-real/ {
+        proxy_pass ${API_UPSTREAM};
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $conexao;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # Conexão longa: o Socket.IO manda ping a cada 25 s; o default de 60 s basta, com folga.
+        proxy_read_timeout 120s;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
