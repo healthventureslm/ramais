@@ -1,101 +1,106 @@
 # Deploy no Coolify
 
-O Coolify sobe o `docker-compose.coolify.yml`: banco, migração, api, worker e web, cada um no seu contêiner. Só a web recebe domínio. A api e o banco ficam na rede interna.
+Mesmo desenho do VoiceHealth, em dois recursos:
 
-## 1. Antes
+| Recurso | Servidor | Build pack | O que sobe | Acesso |
+|---|---|---|---|---|
+| **ramais-api** | vps-api | Docker Compose, `/docker-compose.api.yml` | banco, migracao, api, worker | Só pelo Tailscale: `100.100.212.18:3406` |
+| **ramais-web** | vps-web | Dockerfile, `/apps/web/Dockerfile` | nginx com o build da web | O domínio público. Repassa `/api` e `/tempo-real` para a api. |
 
-- **DNS:** crie um registro A, por exemplo `ramais.seudominio.com.br`, apontando para o IP do servidor do Coolify.
-- **Acesso ao repositório** (`luisf2907/ramais` é privado): no Coolify, **Sources → + Add → GitHub App**. Instale o app na conta `luisf2907` e dê acesso só ao repositório `ramais`.
+O navegador, o QR dos quartos e o webhook da Meta falam só com o domínio da web. A API não aparece na internet.
 
-## 2. Criar o recurso
+Repositório: `healthventureslm/ramais`, branch `docker` (ou `main`, depois de juntar as duas). A porta `3406` está livre na vps-api; o VoiceHealth usa 3106, 3206 e 3006.
 
-1. **Projects → (seu projeto) → + New → Private Repository (with GitHub App)**.
-2. Escolha o app criado acima e o repositório `luisf2907/ramais`.
-3. **Branch:** `main`. A branch `docker` serve enquanto ela não estiver mesclada.
-4. **Build Pack:** `Docker Compose`.
-5. **Base Directory:** `/`.
-6. **Docker Compose Location:** `/docker-compose.coolify.yml`.
-7. Salve. O Coolify lê o arquivo e lista os serviços `banco`, `migracao`, `api`, `worker` e `web`.
+## 1. ramais-api (vps-api)
 
-## 3. Domínio
+**Build configuration:**
 
-Em **Domains**, só no serviço **web**:
+| Campo | Valor |
+|---|---|
+| Branch | `docker` |
+| Build pack | **Docker Compose** (não Railpack) |
+| Base directory | `/` |
+| Docker Compose location | `/docker-compose.api.yml` |
 
-```
-https://ramais.seudominio.com.br:80
-```
+Sem domínio: deixe todos os serviços sem domínio.
 
-O `:80` não aparece para o usuário. Ele diz ao proxy do Coolify em qual porta do contêiner entregar a requisição, e o nginx da web escuta na 80. Deixe os outros serviços sem domínio.
-
-## 4. Variáveis de ambiente
-
-Na aba **Environment Variables** aparecem todas as variáveis do compose. Gere as senhas no seu computador:
-
-```bash
-openssl rand -hex 24
-```
-
-Use hexadecimal: as senhas do banco entram dentro de uma URL `postgres://…`, e símbolos como `@`, `/` ou `#` a quebrariam. **Desmarque "Build Variable"** em todas. Elas só são usadas quando os contêineres rodam e não devem ir para o build das imagens.
-
-**Obrigatórias** (o deploy falha sem elas):
+**Environment Variables.** Desmarque "Build Variable" em todas. Gere as senhas com `openssl rand -hex 24`. Use hexadecimal, porque as senhas entram numa URL `postgres://…` e símbolos a quebram.
 
 | Variável | Valor |
 |---|---|
-| `DB_SENHA_ADMIN` | `openssl rand -hex 24`. É a senha do superusuário `postgres`. |
-| `DB_SENHA_OWNER` | `openssl rand -hex 24`. É a do papel dono das tabelas, usado nas migrações. |
-| `DB_SENHA_APP` | `openssl rand -hex 24`. É a do papel da aplicação, que fica sujeito à RLS. |
+| `API_PUBLICAR` | `100.100.212.18:3406` (IP do Tailscale da vps-api : porta) |
+| `DB_SENHA_ADMIN` | `openssl rand -hex 24` |
+| `DB_SENHA_OWNER` | `openssl rand -hex 24` |
+| `DB_SENHA_APP` | `openssl rand -hex 24` |
 | `JWT_SEGREDO` | `openssl rand -hex 32` |
-| `WEB_URL_PUBLICA` | `https://ramais.seudominio.com.br`, sem barra no fim. É para onde o QR dos quartos aponta. |
+| `WEB_URL_PUBLICA` | `https://ramais.seudominio.com.br`, sem barra no fim. É o domínio da **web**, para onde aponta o QR dos quartos. |
 | `META_APP_SECRET` | segredo do app na Meta. Para testar sem WhatsApp real, qualquer texto serve. |
-| `META_VERIFY_TOKEN` | token de verificação do webhook. Você escolhe o valor e repete no painel da Meta. |
+| `META_VERIFY_TOKEN` | um valor que você escolhe e repete no painel da Meta |
+| `OPENROUTER_API_KEY` | chave da OpenRouter. Sem ela não há IA. |
 
-**Principais opcionais:**
+Opcionais, com default:
 
-| Variável | Default | Quando mudar |
-|---|---|---|
-| `OPENROUTER_API_KEY` | vazio | Sempre. Sem ela não há IA: o roteamento cai para palavras-chave e não há tradução. |
-| `META_DRY_RUN` | `true` | Passe para `false` quando o número do WhatsApp estiver ligado. |
-| `META_TOKEN` | vazio | Token permanente da Meta, junto com `META_DRY_RUN=false`. |
-| `SEED_DEMO` | `false` | `true` só no primeiro deploy de teste. Veja o passo 6. |
-| `IA_MODELO_*` | configuração B de `docs/custos.md` | Só para testar outro modelo. |
-| `ARMAZENAMENTO` | `local` | `s3`, com `S3_BUCKET`, `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY`. |
-| `TRUSTED_PROXY` | `172.16.0.0/12` | Se o IP real dos usuários não aparecer nos logs. Use a subnet que `docker network inspect coolify` mostrar. |
+- `META_DRY_RUN=true`: nada vai para a Meta.
+- `SEED_DEMO=false`: veja a seção 3.
+- `IA_MODELO_*`: configuração B de `docs/custos.md`.
+- `ARMAZENAMENTO=local`: volume `armazenamento`.
 
-Guarde as três senhas do banco num cofre. Elas ficam gravadas no volume `banco` na primeira subida, e trocar depois exige alterar os papéis no Postgres.
+Guarde as senhas do banco num cofre: elas ficam gravadas no volume na primeira subida.
 
-## 5. Deploy
+**Deploy.** A ordem esperada nos logs é:
 
-Clique em **Deploy**. O primeiro build leva alguns minutos; os seguintes usam cache. Nos logs, a ordem esperada é:
+1. `banco` healthy.
+2. `migracao` termina com `pg-boss pronto` e sai. É normal.
+3. `api` mostra `ouvindo em :3000` e fica healthy.
+4. `worker` mostra `pronto`.
 
-1. `banco`: healthy.
-2. `migracao`: `aplicada: 0001…` até a última migração, depois `pg-boss pronto`. Ele termina e sai. Isso é normal, o Coolify não o conta na saúde da aplicação.
-3. `api`: `ouvindo em :3000`. Fica healthy pelo `GET /saude`.
-4. `worker`: `pronto`.
-5. `web`: sobe depois que a api fica healthy.
+Para conferir, de dentro da vps-web: `curl http://100.100.212.18:3406/saude` deve devolver `{"ok":true,…}`.
 
-Para conferir, abra `https://ramais.seudominio.com.br/api/saude`. A resposta esperada é `{"ok":true,"versao":"<commit>"}`.
+## 2. ramais-web (vps-web)
 
-## 6. Primeiro acesso
+**Build configuration:**
+
+| Campo | Valor |
+|---|---|
+| Branch | `docker` |
+| Build pack | **Dockerfile** |
+| Base directory | `/` (o build precisa da raiz do monorepo) |
+| Dockerfile location | `/apps/web/Dockerfile` |
+| Port | `80` |
+| Domínio | `https://ramais.seudominio.com.br` |
+
+**Environment Variables** (runtime, não "Build Variable"):
+
+| Variável | Valor |
+|---|---|
+| `API_UPSTREAM` | `http://100.100.212.18:3406`, sem barra no fim |
+| `TRUSTED_PROXY` | o mesmo valor usado na web do VoiceHealth (de onde vem o proxy HTTPS da vps-web) |
+
+O nginx lê essas variáveis na subida. Mudar a API de lugar é só trocar `API_UPSTREAM` e reiniciar, sem rebuild.
+
+Para conferir: `https://ramais.seudominio.com.br/api/saude` e `https://ramais.seudominio.com.br/version.txt` (o commit do build).
+
+## 3. Primeiro acesso
 
 Ainda não existe um comando para criar a primeira organização e o primeiro admin. Para um ambiente de teste:
 
-1. Coloque `SEED_DEMO=true` e faça **Redeploy**. A migração carrega o Hotel Piloto com equipe e quartos.
-2. Entre com `admin@hotel.dev`. A senha é `SENHA_DEV`, em `tools/seed/dados.ts`.
-3. **Troque a senha do admin na hora**, no menu do usuário → Minha conta. As contas do seed têm senha conhecida e o site está na internet.
-4. Em Administração → Equipe, gere senhas novas para as outras pessoas ou desative as que não usar.
-5. Volte `SEED_DEMO=false`. O seed não roda duas vezes, mas assim fica explícito.
+1. No ramais-api, coloque `SEED_DEMO=true` e faça **Redeploy**. A migração carrega o Hotel Piloto.
+2. Entre na web com `admin@hotel.dev`. A senha é `SENHA_DEV`, em `tools/seed/dados.ts`.
+3. **Troque a senha na hora**, no menu do usuário → Minha conta. A senha do seed é conhecida e o site está na internet.
+4. Em Administração → Equipe, gere senhas novas para as outras pessoas ou desative quem não usar.
+5. Volte `SEED_DEMO=false`.
 
-Para um hotel de verdade, o caminho certo é um comando de "primeiro admin": cria organização, unidade e admin com senha aleatória mostrada uma vez. Ele ainda precisa ser feito.
+Para um hotel de verdade, falta um comando de "primeiro admin": cria organização, unidade e admin com senha aleatória mostrada uma vez.
 
-## 7. WhatsApp (quando houver número)
+## 4. WhatsApp (quando houver número)
 
-- **URL do webhook** no painel da Meta: `https://ramais.seudominio.com.br/api/webhooks/whatsapp`.
-- **Verify token:** o mesmo valor de `META_VERIFY_TOKEN`.
-- Depois, `META_DRY_RUN=false`, `META_TOKEN` e **Redeploy**.
+- **Webhook** no painel da Meta: `https://ramais.seudominio.com.br/api/webhooks/whatsapp`. Ele chega pela web e o nginx repassa para a api.
+- **Verify token:** o valor de `META_VERIFY_TOKEN`.
+- Depois, no ramais-api: `META_DRY_RUN=false`, `META_TOKEN` e **Redeploy**.
 
 ## Operação
 
-- **Atualizar:** push na branch configurada e **Redeploy**. Ligue o "Auto Deploy" do GitHub App se quiser deploy a cada push. Migrações novas rodam sozinhas antes da api subir.
-- **Backup:** os volumes `banco` e `armazenamento` (fotos e áudios). Em **Backups** do Coolify, ou com `pg_dump` dentro do contêiner `banco`.
-- **Logs:** aba **Logs** de cada serviço. A api e o worker mostram erros de fila com o nome do job.
-- **Terminal:** aba **Terminal** → serviço `banco` → `psql -U postgres -d ramais`.
+- **Atualizar:** push e **Redeploy** dos dois recursos. Migrações novas rodam sozinhas antes da api subir. Se só a web mudou, basta o ramais-web.
+- **Backup:** volumes `banco` e `armazenamento` (fotos e áudios) do ramais-api.
+- **Banco:** Terminal do serviço `banco` → `psql -U postgres -d ramais`.
+- **Testar tudo junto na sua máquina:** `docker compose up -d --build` (o `docker-compose.yml`, com a web em `http://localhost:8080`).

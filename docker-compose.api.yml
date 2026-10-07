@@ -1,16 +1,19 @@
-# Ramais no Coolify (build pack "Docker Compose", arquivo /docker-compose.coolify.yml).
+# Backend do Ramais no Coolify, servidor vps-api (build pack "Docker Compose",
+# arquivo /docker-compose.api.yml): banco, migracao, api e worker.
+#
+# Mesmo desenho do VoiceHealth: a API não tem domínio nem porta na internet. Ela é publicada só
+# no IP do Tailscale da vps-api (API_PUBLICAR, ex.: 100.100.212.18:3406), e quem fala com ela é
+# o nginx da web, na vps-web (outro recurso: apps/web/Dockerfile, API_UPSTREAM apontando para cá).
+# É também por esse nginx que chegam o webhook da Meta e o WebSocket.
 #
 # Diferenças para o docker-compose.yml (máquina local):
-#   - Nenhuma porta publicada: o proxy do Coolify chega na web pelo domínio
-#     (Domains → serviço `web` → https://seu-dominio:80). api e banco ficam só na rede interna.
 #   - Toda variável que a api e o worker leem está listada em `environment` com ${VAR}: é assim
 #     que o Coolify mostra cada uma na aba Environment Variables (ele não lê env_file).
 #     `${VAR:?}` = obrigatória (o deploy falha sem ela); `${VAR:-x}` = opcional com default.
 #   - `exclude_from_hc`: a migração roda e sai; não conta para a saúde da aplicação.
 #     (Extensão do Coolify: o `docker compose` local recusa essa chave. Por isso o arquivo é outro.)
 #   - Seed de demonstração só com SEED_DEMO=true (ver o serviço migracao).
-#
-# Mesmas imagens do desenvolvimento (apps/api/Dockerfile e apps/web/Dockerfile).
+#   - O banco não tem porta publicada: só api, worker e migracao o alcançam.
 
 x-banco-urls: &banco-urls
   DATABASE_URL: postgres://ramais_app:${DB_SENHA_APP:?}@banco:5432/ramais
@@ -104,6 +107,9 @@ services:
       target: api
     restart: unless-stopped
     environment: *ambiente-app
+    # SÓ no IP do Tailscale (nunca 0.0.0.0): ip:porta no host → 3000 no contêiner.
+    ports:
+      - "${API_PUBLICAR:?}:3000"
     volumes:
       - armazenamento:/dados/armazenamento
     depends_on:
@@ -125,22 +131,6 @@ services:
     depends_on:
       migracao:
         condition: service_completed_successfully
-
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
-    restart: unless-stopped
-    environment:
-      API_UPSTREAM: http://api:3000
-      # Faixa de onde vem o proxy do Coolify: `docker network inspect coolify` mostra a subnet.
-      # O default da imagem (172.16.0.0/12) cobre as redes padrão do Docker.
-      TRUSTED_PROXY: ${TRUSTED_PROXY:-172.16.0.0/12}
-    depends_on:
-      api:
-        condition: service_healthy
 
 volumes:
   banco:
