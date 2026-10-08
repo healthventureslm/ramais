@@ -19,6 +19,7 @@ import { DiretasController } from './modules/diretas/diretas.controller.js';
 import { Distribuicao } from './modules/distribuicao/distribuicao.service.js';
 import { Escalonamento } from './modules/distribuicao/escada.service.js';
 import { EquipesController } from './modules/equipes/equipes.controller.js';
+import { NotificacoesController } from './modules/equipes/notificacoes.controller.js';
 import { Presencas } from './modules/equipes/presenca.service.js';
 import { MotorFluxo } from './modules/jornada/motor-fluxo.js';
 import { Orquestrador } from './modules/jornada/orquestrador.js';
@@ -38,6 +39,7 @@ const SERVICOS = [Acoes, Comandos, Consultas, Distribuicao, Escalonamento, Prese
     WebhookController,
     ChatQuartoController,
     EquipesController,
+    NotificacoesController,
     SolicitacoesController,
     DiretasController,
     DashboardController,

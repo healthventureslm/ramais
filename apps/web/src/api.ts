@@ -86,7 +86,11 @@ export interface Setor {
 export interface PessoaBusca {
   id: string;
   nome: string;
+  /** App ou web aberta agora. */
+  online: boolean;
   emTurno: boolean;
+  /** Conversas abertas em nome da pessoa. */
+  atendendo: number;
   setores: string | null;
 }
 
@@ -214,6 +218,19 @@ export interface NumerosPeriodo {
   custoIaUsd: number;
 }
 
+/** Uso do mês corrente (no fuso da unidade), por canal: base da tela de Simulação. */
+export interface UsoMes {
+  inicio: string;
+  diasDecorridos: number;
+  diasNoMes: number;
+  quartos: number;
+  pedidos: { whatsapp: number; web: number };
+  mensagensHospede: { whatsapp: number; web: number };
+  mensagensHotel: { whatsapp: number; web: number };
+  iaUsd: number;
+  iaChamadas: number;
+}
+
 export interface Relatorio {
   dias: number;
   geral: NumerosPeriodo & { aceiteP50: number | null; ofertasExpiradas: number; ofertasRecusadas: number; ofertas: number };
@@ -327,6 +344,7 @@ export const api = {
     novoCodigo: (id: string) => chamar('POST', `/admin/quartos/${id}/novo-codigo`),
 
     relatorio: (unidadeId: string, dias: number) => chamar<Relatorio>('GET', `/admin/relatorio?unidadeId=${unidadeId}&dias=${dias}`),
+    usoMes: (unidadeId: string) => chamar<UsoMes>('GET', `/admin/relatorio/mes?unidadeId=${unidadeId}`),
 
     automacao: (unidadeId: string) =>
       chamar<

@@ -15,7 +15,9 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 .pequeno { font: var(--type-caption); }
 
 /* ---------- Casca ---------- */
-.casca { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; height: 100dvh; }
+.casca { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; height: 100dvh; }
+/* Faixa de convite (notificações) entre o topo e o miolo; vazia, não ocupa nada. */
+.casca__faixa:not(:empty) { padding: var(--space-2) var(--pad-page) 0; }
 .casca__miolo { min-height: 0; overflow: hidden; display: grid; }
 /* scrollbar-gutter: a faixa da barra de rolagem existe sempre. Sem ela, a página curta (sem barra)
    e a comprida (com barra) centralizavam o conteúdo em lugares diferentes: tudo andava ~7px de lado
@@ -113,6 +115,12 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 .zap--vazio { justify-content: center; padding: var(--space-6); background: var(--surface-canvas); }
 @media (min-width: 761px) { .zap { border-inline: var(--border-hair) solid var(--border-subtle); } }
 
+/* Menu principal do chat do quarto: barra logo abaixo do cabeçalho, abre a lista de setores. */
+.zap__menu { padding: var(--space-1) var(--space-3); background: var(--surface-card); border-bottom: var(--border-hair) solid var(--border-subtle); }
+/* Pedido de aviso no celular quando o hotel responder (Web Push). */
+.zap__notificar { display: flex; justify-content: center; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-4); background: var(--surface-card); border-bottom: var(--border-hair) solid var(--border-subtle); }
+.zap__notificar--ativo { font: var(--type-body-sm); color: var(--text-muted); }
+.zap__notificar--ativo svg { width: 16px; height: 16px; flex: none; }
 .zap__cabeca { display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-4) var(--space-2); background: var(--zap-cabeca); color: var(--zap-cabeca-texto); }
 .zap__avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--coral-500); color: var(--petrol-950); font-family: var(--font-display); font-weight: 700; font-size: 15px; }
 .zap__quem { min-width: 0; display: grid; }
@@ -182,7 +190,7 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 /* Mensagens diretas: lista · conversa */
 .diretas { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 0; height: 100%; }
 .diretas__lista { min-height: 0; overflow-y: auto; background: var(--surface-card); border-right: var(--border-hair) solid var(--border-subtle); }
-.diretas__busca { position: sticky; top: 0; z-index: 2; background: var(--surface-card); padding: var(--space-3); border-bottom: var(--border-hair) solid var(--border-subtle); }
+.diretas__busca { position: sticky; top: 0; z-index: 2; display: grid; gap: var(--space-2); background: var(--surface-card); padding: var(--space-3); border-bottom: var(--border-hair) solid var(--border-subtle); }
 @media (max-width: 767px) {
   .diretas { grid-template-columns: minmax(0, 1fr); }
   .diretas--aberta .diretas__lista { display: none; }

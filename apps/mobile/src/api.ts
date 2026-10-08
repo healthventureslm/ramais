@@ -55,7 +55,11 @@ export interface MensagemDireta {
 export interface PessoaBusca {
   id: string;
   nome: string;
+  /** App ou web aberta agora. */
+  online: boolean;
   emTurno: boolean;
+  /** Conversas abertas em nome da pessoa. */
+  atendendo: number;
   setores: string | null;
 }
 

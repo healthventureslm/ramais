@@ -100,7 +100,7 @@ export function Diretas({
       ListHeaderComponent={
         <View style={{ gap: 10, marginBottom: 6 }}>
           <Pressable style={s.botao} onPress={() => setNova(true)}>
-            <Text style={s.botaoTexto}>Nova mensagem</Text>
+            <Text style={s.botaoTexto}>Equipe: quem está online</Text>
           </Pressable>
           {conversas.length === 0 && <Text style={s.mudo}>Nenhuma conversa ainda. Mande uma mensagem para alguém da equipe.</Text>}
         </View>
@@ -154,15 +154,20 @@ function EscolherPessoa({
   const [pessoas, setPessoas] = useState<PessoaBusca[]>([]);
   const unidadeId = sessao.unidades[0]?.id;
 
+  // Sem busca, a equipe toda (online primeiro); atualiza sozinha enquanto a tela está aberta.
   useEffect(() => {
     if (!unidadeId) return;
-    const t = setTimeout(() => {
+    const buscar = () =>
       api
         .pessoas(unidadeId, busca)
         .then((l) => setPessoas(l.filter((p) => p.id !== sessao.pessoa.id)))
         .catch(() => undefined);
-    }, 250);
-    return () => clearTimeout(t);
+    const t = setTimeout(buscar, 250);
+    const i = setInterval(buscar, 15_000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(i);
+    };
   }, [api, busca, unidadeId, sessao.pessoa.id]);
 
   return (
@@ -175,9 +180,8 @@ function EscolherPessoa({
           style={[s.entrada, { flex: 1 }]}
           value={busca}
           onChangeText={setBusca}
-          placeholder="Nome ou setor (ex.: manutenção)"
+          placeholder="Filtrar por nome ou setor"
           placeholderTextColor={c.texto2}
-          autoFocus
         />
       </View>
       <FlatList
@@ -189,11 +193,17 @@ function EscolherPessoa({
           <Pressable style={s.cartao} onPress={() => aoEscolher(item)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Text style={[s.texto, { fontFamily: F.forte, flex: 1 }]}>{item.nome}</Text>
-              <Lampada cor={item.emTurno ? c.ok : c.apagada}>
-                <Text style={[s.mudo, item.emTurno && { color: c.ok }]}>{item.emTurno ? 'no turno' : 'fora do turno'}</Text>
+              <Lampada cor={item.online || item.emTurno ? c.ok : c.apagada}>
+                <Text style={[s.mudo, (item.online || item.emTurno) && { color: c.ok }]}>
+                  {item.online ? 'online' : item.emTurno ? 'no turno' : 'fora do turno'}
+                </Text>
               </Lampada>
             </View>
-            {item.setores && <Text style={s.mudo}>{item.setores}</Text>}
+            <Text style={s.mudo}>
+              {[item.setores, item.atendendo > 0 ? `atendendo ${item.atendendo}` : item.online || item.emTurno ? 'livre' : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
           </Pressable>
         )}
       />

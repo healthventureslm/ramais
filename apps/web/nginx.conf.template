@@ -67,6 +67,12 @@ server {
         include /etc/nginx/conf.d/seguranca.inc;
     }
 
+    # Service worker das notificações: o navegador precisa ver a versão nova a cada deploy.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+        include /etc/nginx/conf.d/seguranca.inc;
+    }
+
     location /api/ {
         # COM barra no fim, de propósito: o nginx corta o /api e a API recebe /chat/sessao,
         # /webhook/... — as rotas dela não têm prefixo (é o mesmo que o proxy do Vite faz).

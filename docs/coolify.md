@@ -56,6 +56,7 @@ As portas vêm do compose (`TAILNET_IP` e `API_PORT`, com defaults `100.100.212.
 | `META_APP_SECRET` | painel da Meta → Configurações do app → Básico. Para testar em dry-run, qualquer texto serve. |
 | `META_VERIFY_TOKEN` | `openssl rand -hex 24`; o mesmo valor vai no painel da Meta |
 | `OPENROUTER_API_KEY` | chave da OpenRouter. Sem ela não há IA. |
+| `VAPID_PUBLICA`, `VAPID_PRIVADA` | notificação no navegador (equipe e chat do quarto). Gere o par com `pnpm --filter @ramais/api vapid`. Sem elas, o recurso fica desligado. Trocar o par obriga cada navegador a ativar de novo. |
 
 Opcionais, com default:
 
@@ -165,6 +166,13 @@ Ainda não existe um comando para criar a primeira organização e o primeiro ad
 Para criar em produção, no ramais-api: variável `DEMO_SENHA` (6+ caracteres, só Runtime) e **Redeploy**. A migração cria o hotel uma vez só; os redeploys seguintes não mexem nele.
 
 Os horários de café, check-in e check-out, piscina e academia, e a numeração dos quartos, foram supostos (não são públicos). Confira em Administração → Base de conhecimento antes da apresentação. Depois dela, troque as senhas ou desative as contas.
+
+## Notificações
+
+- **Equipe, na web:** o Ramais oferece "Ativar" no topo (e no menu da conta). Com isso, pedido novo, mensagem do hóspede no atendimento da pessoa, nota interna, menção e mensagem direta aparecem como notificação do sistema, mesmo com a aba fechada. Com o Ramais aberto na tela, o aviso aparece só dentro dele.
+- **Hóspede, no chat do quarto:** depois de escrever, aparece "Avisar quando o hotel responder". A resposta da equipe chega como notificação no celular dele.
+- **iPhone:** o Safari só recebe notificação com o site adicionado à Tela de Início. Numa aba comum, o botão não aparece. Android (Chrome) e computador funcionam direto.
+- **App da equipe (celular):** usa o FCM (`FCM_CONTA_SERVICO_B64`). Sem ele, os avisos do app só vão para o log; a web continua funcionando pelo Web Push.
 
 ## 5. WhatsApp (quando houver número)
 

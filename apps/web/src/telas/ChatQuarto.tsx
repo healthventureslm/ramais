@@ -1,10 +1,30 @@
-import { Banner, Button, EmptyState, HVProvider, IconButton, Textarea } from '@healthventureslm/design-system';
+import { ActionSheet, Banner, Button, EmptyState, HVProvider, IconButton, Textarea } from '@healthventureslm/design-system';
 import type { ChatView } from '@ramais/contracts';
-import { AlertCircle, Camera, Check, CheckCheck, Clock3, ConciergeBell, Lock, Mic, SendHorizontal } from 'lucide-react';
+import {
+  AlertCircle,
+  BedDouble,
+  Bell,
+  BellRing,
+  Camera,
+  Check,
+  CheckCheck,
+  ChevronDown,
+  Clock3,
+  ConciergeBell,
+  LayoutGrid,
+  Lock,
+  MapPinned,
+  MessagesSquare,
+  Mic,
+  SendHorizontal,
+  UtensilsCrossed,
+  Wrench,
+} from 'lucide-react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { API } from '../api';
 import { Avisos, avisar } from '../componentes/Avisos';
 import { MidiaMensagem, TEXTOS_MIDIA, useAnexos, type ArquivoPronto, type TextosMidia } from '../componentes/Midia';
+import { ativarChat, estadoNotificacao, type EstadoNotificacao } from '../notificacoes';
 import { hora } from '../util';
 
 type Idioma = 'pt' | 'en' | 'es';
@@ -28,6 +48,15 @@ const TEXTOS = {
     hoje: 'Hoje',
     ontem: 'Ontem',
     gravarAudio: 'Gravar áudio',
+    avisar: 'Avisar quando o hotel responder',
+    avisoAtivo: 'Pronto: você recebe um aviso neste celular quando o hotel responder.',
+    avisoBloqueado: 'As notificações deste site estão bloqueadas no navegador.',
+    menu: 'Menu principal',
+    menuTitulo: 'Com quem você quer falar?',
+    menuDica: 'Escolha o setor e a sua conversa vai direto para ele.',
+    menuAtual: 'Você está falando com este setor',
+    menuCancelar: 'Cancelar',
+    menuJaEsta: 'Você já está falando com este setor.',
     midia: {
       ...TEXTOS_MIDIA,
     } satisfies TextosMidia,
@@ -50,6 +79,15 @@ const TEXTOS = {
     hoje: 'Today',
     ontem: 'Yesterday',
     gravarAudio: 'Record voice message',
+    avisar: 'Notify me when the hotel replies',
+    avisoAtivo: 'Done: you will get a notification on this phone when the hotel replies.',
+    avisoBloqueado: 'Notifications for this site are blocked in your browser.',
+    menu: 'Main menu',
+    menuTitulo: 'Who would you like to talk to?',
+    menuDica: 'Choose a department and your conversation goes straight to it.',
+    menuAtual: 'You are talking to this department',
+    menuCancelar: 'Cancel',
+    menuJaEsta: 'You are already talking to this department.',
     midia: {
       enviarFoto: 'Send photo',
       gravarAudio: 'Record voice message',
@@ -92,6 +130,15 @@ const TEXTOS = {
     hoje: 'Hoy',
     ontem: 'Ayer',
     gravarAudio: 'Grabar audio',
+    avisar: 'Avisarme cuando el hotel responda',
+    avisoAtivo: 'Listo: recibirá un aviso en este celular cuando el hotel responda.',
+    avisoBloqueado: 'Las notificaciones de este sitio están bloqueadas en el navegador.',
+    menu: 'Menú principal',
+    menuTitulo: '¿Con quién quiere hablar?',
+    menuDica: 'Elija el sector y su conversación va directo a él.',
+    menuAtual: 'Está hablando con este sector',
+    menuCancelar: 'Cancelar',
+    menuJaEsta: 'Ya está hablando con este sector.',
     midia: {
       enviarFoto: 'Enviar foto',
       gravarAudio: 'Grabar audio',
@@ -139,6 +186,23 @@ function idiomaDoNavegador(): string {
   return normalizarIdioma(idiomaForcado() ?? (navigator.language || 'pt'));
 }
 const pronto = (l: string): l is Idioma => l === 'pt' || l === 'en' || l === 'es';
+
+/** Ícone de cada setor no Menu principal (setor novo, sem ícone próprio, usa o de conversa). */
+const ICONE_SETOR: Record<string, typeof Wrench> = {
+  recepcao: ConciergeBell,
+  governanca: BedDouble,
+  manutencao: Wrench,
+  alimentos_bebidas: UtensilsCrossed,
+  concierge: MapPinned,
+};
+
+/** Nome do setor no idioma da tela: PT e ES do cadastro; os outros idiomas usam o nome em inglês. */
+function nomeDoSetor(s: ChatView['setores'][number], idioma: string): string {
+  const base = idioma.split('-')[0];
+  if (base === 'pt') return s.nome;
+  if (base === 'es') return s.nomes.es ?? s.nome;
+  return s.nomes.en ?? s.nome;
+}
 
 /** Os textos da tela numa lista só (a foto vai "{0}"), para traduzir de uma vez. */
 function planificar(t: Textos): { chaves: string[]; textos: string[] } {
@@ -341,6 +405,41 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
       .catch(() => undefined);
   }, [telaPronta, idioma, comSessao]);
 
+  // Aviso no celular quando o hotel responder (com o chat fechado). Quem já permitiu é inscrito
+  // de novo em silêncio: cada leitura do QR é uma sessão nova.
+  const [notificacao, setNotificacao] = useState<EstadoNotificacao | null>(null);
+  useEffect(() => {
+    if (!telaPronta) return;
+    void estadoNotificacao().then((e) => {
+      setNotificacao(e);
+      if (e === 'ativa') void comSessao((tk) => ativarChat(tk, false)).catch(() => undefined);
+    });
+  }, [telaPronta, comSessao]);
+  async function pedirAviso() {
+    try {
+      const e = await comSessao((tk) => ativarChat(tk));
+      setNotificacao(e);
+      if (e === 'ativa') avisar(t.avisoAtivo, 'success');
+      else if (e === 'bloqueada') avisar(t.avisoBloqueado, 'warning');
+    } catch {
+      avisar(t.semConexao, 'error');
+    }
+  }
+  const escreveu = pendentes.length > 0 || Boolean(dados?.mensagens.some((m) => m.autor === 'hospede'));
+
+  // Menu principal: o hóspede escolhe o setor; a conversa vai para lá a qualquer momento.
+  const [menuAberto, setMenuAberto] = useState(false);
+  async function escolherSetor(chave: string) {
+    setMenuAberto(false);
+    try {
+      const r = await comSessao((tk) => chamar<{ jaEstava: boolean }>('POST', '/chat/setor', tk, { chave }));
+      if (r.jaEstava) avisar(t.menuJaEsta, 'info');
+      void carregar();
+    } catch {
+      avisar(t.semConexao, 'error');
+    }
+  }
+
   const total = (dados?.mensagens.length ?? 0) + pendentes.length;
   useEffect(() => {
     void fim.current?.scrollIntoView({ block: 'end' });
@@ -405,7 +504,44 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
             <span>{dados ? `${t.quarto} ${dados.quarto} · ${t.titulo}` : ''}</span>
           </div>
         </header>
+        {dados && dados.setores.length > 0 && (
+          <div className="zap__menu">
+            <Button block variant="ghost" iconLeft={<LayoutGrid />} iconRight={<ChevronDown />} onClick={() => setMenuAberto(true)}>
+              {t.menu}
+            </Button>
+          </div>
+        )}
+        <ActionSheet
+          open={menuAberto}
+          onClose={() => setMenuAberto(false)}
+          title={t.menuTitulo}
+          description={t.menuDica}
+          cancelLabel={t.menuCancelar}
+          items={(dados?.setores ?? []).map((s) => {
+            const Icone = ICONE_SETOR[s.chave] ?? MessagesSquare;
+            return {
+              id: s.chave,
+              label: nomeDoSetor(s, idioma),
+              description: dados?.setorAtual === s.chave ? t.menuAtual : undefined,
+              icon: <Icone />,
+              onSelect: () => void escolherSetor(s.chave),
+            };
+          })}
+        />
         {offline && <Banner variant="warning" title={t.semConexao} />}
+        {notificacao === 'pendente' && escreveu && (
+          <div className="zap__notificar">
+            <Button size="sm" variant="secondary" iconLeft={<Bell />} onClick={() => void pedirAviso()}>
+              {t.avisar}
+            </Button>
+          </div>
+        )}
+        {notificacao === 'ativa' && escreveu && (
+          <p className="zap__notificar zap__notificar--ativo">
+            <BellRing aria-hidden="true" />
+            {t.avisoAtivo}
+          </p>
+        )}
         <div className="zap__parede" aria-live="polite">
           <p className="zap__aviso">
             <Lock aria-hidden="true" />

@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { CadastrarDispositivoReq, EntrarTurnoReq, LoginWebReq, SairTurnoReq } from '@ramais/contracts';
 import { z } from 'zod';
 import { ApenasSessoes, pessoaDa, Publico, SessaoAtual, type Sessao } from '../../infra/auth.js';
+import { conectados } from '../../infra/conectados.js';
 import { Nucleo } from '../../infra/nucleo.js';
 import { Uuid, Zod } from '../../infra/validacao.js';
 import { Presencas } from './presenca.service.js';
@@ -91,7 +92,11 @@ export class EquipesController {
     });
   }
 
-  /** Busca por nome, com status: base da mensagem direta ("ramal"). */
+  /**
+   * A equipe da unidade com status: base da mensagem direta ("ramal"). Sem busca, lista todo mundo.
+   * Online é ter o app ou a web aberta agora; no turno é ter entrado no turno; atendendo conta as
+   * conversas abertas em nome da pessoa.
+   */
   @Get('pessoas')
   pessoas(@SessaoAtual() s: Sessao, @Query('unidadeId', Uuid) unidadeId: string, @Query('busca') busca?: string) {
     return this.nucleo.executar(s.orgId, async (c) => {
@@ -100,6 +105,8 @@ export class EquipesController {
         // Gerência e administração valem para todas as unidades, mesmo sem setor.
         `SELECT p.id, p.nome,
                 EXISTS (SELECT 1 FROM presenca pr WHERE pr.pessoa_id = p.id AND pr.fim IS NULL) AS em_turno,
+                (SELECT count(*)::int FROM solicitacao so
+                  WHERE so.responsavel_id = p.id AND so.estado IN ('em_atendimento', 'aguardando_solicitante')) AS atendendo,
                 coalesce((SELECT string_agg(DISTINCT st.nome, ', ') FROM lotacao l JOIN setor st ON st.id = l.setor_id WHERE l.pessoa_id = p.id),
                          CASE WHEN p.gerente THEN 'Gerência' WHEN p.admin THEN 'Administração' END) AS setores
            FROM pessoa p
@@ -108,10 +115,20 @@ export class EquipesController {
             AND ($2::text IS NULL OR p.nome ILIKE '%' || $2 || '%'
                  OR EXISTS (SELECT 1 FROM lotacao l JOIN setor s ON s.id = l.setor_id
                              WHERE l.pessoa_id = p.id AND s.unidade_id = $1 AND s.nome ILIKE '%' || $2 || '%'))
-          ORDER BY 3 DESC, p.nome LIMIT 50`,
+          ORDER BY 3 DESC, p.nome LIMIT 300`,
         [unidadeId, busca?.trim() || null],
       );
-      return r.rows.map((l) => ({ id: l.id, nome: l.nome, emTurno: l.em_turno, setores: l.setores }));
+      const lista = r.rows.map((l) => ({
+        id: l.id,
+        nome: l.nome,
+        online: conectados.online(l.id),
+        emTurno: l.em_turno,
+        atendendo: l.atendendo,
+        setores: l.setores,
+      }));
+      // Online primeiro, depois no turno, depois o resto; nome dentro de cada grupo.
+      const peso = (x: (typeof lista)[number]) => (x.online ? 0 : x.emTurno ? 1 : 2);
+      return lista.sort((a, b) => peso(a) - peso(b) || a.nome.localeCompare(b.nome, 'pt-BR'));
     });
   }
 

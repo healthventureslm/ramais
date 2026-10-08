@@ -5,6 +5,7 @@ import { comTenant } from '@ramais/db';
 import type pg from 'pg';
 import { Server } from 'socket.io';
 import type { Tokens } from '../../infra/auth.js';
+import { conectados } from '../../infra/conectados.js';
 import { TABELA_ANEXOS } from '../../infra/tempo-real.js';
 
 /**
@@ -35,6 +36,9 @@ export function iniciarTempoReal(http: HttpServer, pool: pg.Pool, tokens: Tokens
 
   io.on('connection', async (socket) => {
     const s = socket.data.sessao as Awaited<ReturnType<Tokens['verificar']>>;
+    // Antes de qualquer await, para não perder um disconnect no meio.
+    conectados.entrou(s.pessoaId!);
+    socket.on('disconnect', () => conectados.saiu(s.pessoaId!));
     try {
       const salas = await comTenant(pool, s.orgId, async ({ client }) => {
         const p = (await client.query('SELECT admin FROM pessoa WHERE id = $1', [s.pessoaId])).rows[0];

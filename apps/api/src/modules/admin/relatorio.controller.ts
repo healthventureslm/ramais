@@ -65,6 +65,77 @@ export class RelatorioController {
     };
   }
 
+  /**
+   * Uso do mês corrente (no fuso da unidade), para a tela de Simulação comparar o simulado com o real:
+   * pedidos e mensagens por canal, custo de IA e quartos cadastrados. Conversas do simulador não entram.
+   */
+  @Get('mes')
+  mes(@SessaoAtual() s: Sessao, @Query('unidadeId', Uuid) unidadeId: string) {
+    return this.nucleo.executar(s.orgId, async (c) => {
+      await exigirGestao(c, s);
+      const fuso = (await c.tx.client.query('SELECT fuso FROM unidade WHERE id = $1', [unidadeId])).rows[0]?.fuso ?? 'America/Sao_Paulo';
+      const m = (
+        await c.tx.client.query(
+          `WITH i AS (SELECT date_trunc('month', now() AT TIME ZONE $1) AS local)
+           SELECT i.local AT TIME ZONE $1 AS inicio,
+                  extract(epoch FROM now() - (i.local AT TIME ZONE $1)) / 86400 AS decorridos,
+                  extract(day FROM i.local + interval '1 month' - interval '1 day')::int AS dias_no_mes
+             FROM i`,
+          [fuso],
+        )
+      ).rows[0];
+      const p = [unidadeId, m.inicio];
+      const canal = `coalesce(cw.tipo, 'whatsapp')`;
+
+      const pedidos = (
+        await c.tx.client.query(
+          `SELECT count(*) FILTER (WHERE ${canal} = 'whatsapp')::int AS whatsapp, count(*) FILTER (WHERE ${canal} = 'web')::int AS web
+             FROM solicitacao s LEFT JOIN canal_whatsapp cw ON cw.id = s.canal_id
+            WHERE s.unidade_id = $1 AND NOT s.teste AND s.origem = 'externa' AND s.criado_em >= $2`,
+          p,
+        )
+      ).rows[0];
+
+      // Do hotel: tudo o que saiu para o hóspede (equipe, IA e automáticas); notas internas não saem.
+      const msgs = (
+        await c.tx.client.query(
+          `SELECT count(*) FILTER (WHERE m.autor_tipo = 'solicitante' AND ${canal} = 'whatsapp')::int AS hospede_whatsapp,
+                  count(*) FILTER (WHERE m.autor_tipo = 'solicitante' AND ${canal} = 'web')::int AS hospede_web,
+                  count(*) FILTER (WHERE m.autor_tipo <> 'solicitante' AND m.visibilidade = 'externa' AND ${canal} = 'whatsapp')::int AS hotel_whatsapp,
+                  count(*) FILTER (WHERE m.autor_tipo <> 'solicitante' AND m.visibilidade = 'externa' AND ${canal} = 'web')::int AS hotel_web
+             FROM mensagem m JOIN solicitacao s ON s.id = m.solicitacao_id LEFT JOIN canal_whatsapp cw ON cw.id = s.canal_id
+            WHERE s.unidade_id = $1 AND NOT s.teste AND s.origem = 'externa' AND m.criado_em >= $2`,
+          p,
+        )
+      ).rows[0];
+
+      const ia = (
+        await c.tx.client.query(
+          `SELECT coalesce(sum(u.custo_usd), 0) AS usd, count(*)::int AS chamadas
+             FROM uso_ia u LEFT JOIN solicitacao s ON s.id = u.solicitacao_id
+            WHERE coalesce(u.unidade_id, s.unidade_id) = $1 AND (s.id IS NULL OR NOT s.teste) AND u.criado_em >= $2`,
+          p,
+        )
+      ).rows[0];
+
+      const quartos = (
+        await c.tx.client.query(`SELECT count(*)::int AS n FROM local WHERE unidade_id = $1 AND ativo AND tipo = 'quarto'`, [unidadeId])
+      ).rows[0].n as number;
+
+      return {
+        inicio: (m.inicio as Date).toISOString(),
+        diasDecorridos: Math.max(0, Number(m.decorridos)),
+        diasNoMes: m.dias_no_mes as number,
+        quartos,
+        pedidos: { whatsapp: pedidos.whatsapp as number, web: pedidos.web as number },
+        mensagensHospede: { whatsapp: msgs.hospede_whatsapp as number, web: msgs.hospede_web as number },
+        mensagensHotel: { whatsapp: msgs.hotel_whatsapp as number, web: msgs.hotel_web as number },
+        iaUsd: dinheiro(ia.usd),
+        iaChamadas: ia.chamadas as number,
+      };
+    });
+  }
+
   @Get()
   ver(@SessaoAtual() s: Sessao, @Query('unidadeId', Uuid) unidadeId: string, @Query('dias') diasQ = '7') {
     const dias = Math.min(90, Math.max(1, Number(diasQ) || 7));

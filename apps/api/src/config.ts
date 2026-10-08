@@ -72,6 +72,11 @@ const Esquema = z.object({
   AWS_REGION: z.string().default('sa-east-1'),
 
   FCM_CONTA_SERVICO_B64: vazioNulo,
+
+  /** Web Push (notificação no navegador). Sem as chaves, fica desligado. Gere com `pnpm --filter @ramais/api vapid`. */
+  VAPID_PUBLICA: vazioNulo,
+  VAPID_PRIVADA: vazioNulo,
+  VAPID_CONTATO: z.string().default('mailto:contato@ramais.com.br'),
 });
 
 export type Config = z.infer<typeof Esquema>;

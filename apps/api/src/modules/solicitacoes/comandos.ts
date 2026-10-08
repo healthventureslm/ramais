@@ -108,7 +108,8 @@ export class Comandos {
       const p = await this.exigirAcesso(c, s, pessoaId);
       if (req.visibilidade === 'interna') {
         const mid = await this.acoes.notaInterna(c, s.id, req.texto, { tipo: 'pessoa', id: pessoaId });
-        await this.mencoes(c, s, req.texto, pessoaId);
+        const mencionados = await this.mencoes(c, s, req.texto, pessoaId);
+        await this.avisarNota(c, s, req.texto, pessoaId, mencionados);
         return { mensagemId: mid };
       }
       this.podeFalarComSolicitante(s, p);
@@ -138,6 +139,7 @@ export class Comandos {
         legenda: req.legenda?.trim() || null,
       });
       if (req.visibilidade === 'externa') await this.respondeu(c, s);
+      else await this.avisarNota(c, s, req.legenda?.trim() || (req.tipo === 'audio' ? 'Mensagem de voz' : 'Foto'), pessoaId, []);
       return { mensagemId };
     });
   }
@@ -175,9 +177,9 @@ export class Comandos {
   }
 
   /** Menção com @nome em nota interna avisa a pessoa. A IA nunca cria pedido em silêncio. */
-  private async mencoes(c: Ctx, s: SolicitacaoRow, texto: string, autorId: string) {
+  private async mencoes(c: Ctx, s: SolicitacaoRow, texto: string, autorId: string): Promise<string[]> {
     const nomes = [...texto.matchAll(/@([\p{L}][\p{L}.\-]*)/gu)].map((m) => m[1]!.toLowerCase());
-    if (!nomes.length) return;
+    if (!nomes.length) return [];
     const r = await c.tx.client.query<{ id: string }>(
       `SELECT id FROM pessoa WHERE ativo AND id <> $2 AND lower(split_part(nome, ' ', 1)) = ANY($1::text[])`,
       [nomes, autorId],
@@ -193,6 +195,27 @@ export class Comandos {
       });
       c.ef.depois(() => this.nucleo.tempoReal.emitir(sala.pessoa(p.id), 'aviso', { texto: `Você foi mencionado: ${texto.slice(0, 80)}` }));
     }
+    return r.rows.map((p) => p.id);
+  }
+
+  /**
+   * Nota interna de outra pessoa no atendimento que está comigo: chega como aviso (mensagem
+   * interna também notifica). Quem foi mencionado já recebeu o dele.
+   */
+  private async avisarNota(c: Ctx, s: SolicitacaoRow, texto: string, autorId: string, jaAvisados: string[]) {
+    const dono = s.responsavel_id;
+    if (!dono || dono === autorId || jaAvisados.includes(dono)) return;
+    const autor = (await c.tx.client.query<{ nome: string }>('SELECT nome FROM pessoa WHERE id = $1', [autorId])).rows[0];
+    const quem = autor?.nome.split(' ')[0] ?? 'Alguém da equipe';
+    await this.nucleo.enfileirar(c, 'notificacao', {
+      orgId: c.tx.orgId,
+      pessoaId: dono,
+      titulo: `Nota interna de ${quem}`,
+      corpo: `${s.resumo ? `${s.resumo}: ` : ''}${texto}`.slice(0, 140),
+      dados: { tipo: 'nota', solicitacaoId: s.id },
+      alta: false,
+    });
+    c.ef.depois(() => this.nucleo.tempoReal.emitir(sala.pessoa(dono), 'aviso', { texto: `Nota de ${quem}: ${texto.slice(0, 80)}` }));
   }
 
   async previaTraducao(orgId: string, id: string, pessoaId: string, texto: string) {
@@ -344,6 +367,8 @@ export class Comandos {
       if (!(p.responsavel || p.supervisor || p.admin)) throw new ForbiddenException();
       const r = await this.acoes.encerrar(c, s, { tipo: 'pessoa', id: pessoaId }, 'equipe');
       if (!r) throw new ConflictException(`não dá para encerrar em ${s.estado}`);
+      // O hóspede fica sabendo. Resolvida já avisou ("seu pedido foi concluído"), não repete.
+      if (s.origem === 'externa' && s.estado !== 'resolvida') await this.acoes.enviarTextoFixo(c, r, 'encerramento');
     });
   }
 

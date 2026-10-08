@@ -13,7 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { ServicosIA } from '@ramais/ai';
-import { ArquivoMidia, ChatMensagemReq, ChatSessaoReq, ChatTextosReq, type ChatView } from '@ramais/contracts';
+import { ArquivoMidia, ChatMensagemReq, ChatSessaoReq, ChatTextosReq, InscricaoPushReq, type ChatView } from '@ramais/contracts';
 import { resolverChat, resolverQuarto } from '@ramais/db';
 import type { Response } from 'express';
 import type pg from 'pg';
@@ -24,9 +24,12 @@ import { ARMAZENAMENTO } from '../../infra/infra.module.js';
 import { lerArquivo } from '../../infra/midia.js';
 import { Nucleo, type Ctx } from '../../infra/nucleo.js';
 import { IA, POOL } from '../../infra/tokens.js';
+import { Unidades } from '../../infra/unidades.js';
 import { comContextoIA } from '../../infra/uso-ia.js';
 import { Uuid, Zod } from '../../infra/validacao.js';
-import { solicitanteDoQuarto, type EntradaMensagem } from '../jornada/orquestrador.js';
+import { Orquestrador, solicitanteDoQuarto, type EntradaMensagem } from '../jornada/orquestrador.js';
+
+const ChatSetorReq = z.object({ chave: z.string().regex(/^[a-z][a-z0-9_]*$/).max(60) });
 
 const ChatMidiaReq = ArquivoMidia.extend({ id: z.uuid(), legenda: z.string().trim().max(1000).optional() });
 type ChatMidiaReq = z.infer<typeof ChatMidiaReq>;
@@ -56,6 +59,8 @@ export class ChatQuartoController {
     @Inject(POOL) private readonly pool: pg.Pool,
     @Inject(ARMAZENAMENTO) private readonly armazenamento: Armazenamento,
     @Inject(IA) private readonly ia: ServicosIA,
+    private readonly unidades: Unidades,
+    private readonly orquestrador: Orquestrador,
   ) {}
 
   /** Textos da tela já traduzidos, por idioma e conteúdo: só o primeiro hóspede de cada idioma espera a IA. */
@@ -119,6 +124,41 @@ export class ChatQuartoController {
     });
   }
 
+  /** Menu principal: o hóspede escolhe o setor; vai para lá a qualquer momento (ver Orquestrador.escolherSetor). */
+  @Post('setor')
+  @HttpCode(200)
+  async escolherSetor(@Headers('x-chat') token: string | undefined, @Body(new Zod(ChatSetorReq)) b: z.infer<typeof ChatSetorReq>) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    const { s, canalId } = await this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      return { s, canalId: await this.canalWeb(c, s.unidadeId) };
+    });
+    return this.orquestrador.escolherSetor({
+      orgId,
+      unidadeId: s.unidadeId,
+      canalId,
+      localId: s.localId,
+      naoAntesDe: s.estadiaDesde.toISOString(),
+      chave: b.chave,
+    });
+  }
+
+  /** O hóspede pediu aviso quando a equipe responder: este navegador passa a receber (até a sessão vencer). */
+  @Post('notificacoes')
+  @HttpCode(200)
+  async notificacoes(@Headers('x-chat') token: string | undefined, @Body(new Zod(InscricaoPushReq)) b: InscricaoPushReq) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    return this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      await c.tx.client.query(
+        `INSERT INTO push_web (org_id, chat_sessao_id, endpoint, p256dh, auth) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (endpoint, chat_sessao_id) WHERE chat_sessao_id IS NOT NULL DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
+        [orgId, s.id, b.endpoint, b.keys.p256dh, b.keys.auth],
+      );
+      return { ok: true };
+    });
+  }
+
   /** A conversa da estadia, do jeito que o hóspede vê: no idioma dele, sem notas internas. */
   @Get()
   async ver(@Headers('x-chat') token: string | undefined): Promise<ChatView> {
@@ -153,6 +193,7 @@ export class ChatQuartoController {
       return {
         ...(await this.cabecalho(c, s.unidadeId, s.localId)),
         idioma: conversa.rows[0]?.idioma ?? null,
+        ...(await this.menu(c, s)),
         mensagens: r.rows.reverse().map((l) => {
           const hospede = l.autor_tipo === 'solicitante';
           // Para o hóspede, a fala da equipe aparece já traduzida (no áudio, a transcrição traduzida).
@@ -235,6 +276,23 @@ export class ChatQuartoController {
     const l = r.rows[0];
     if (!l) throw new UnauthorizedException();
     return { id: l.id, orgId: l.org_id, unidadeId: l.unidade_id, localId: l.local_id, estadiaDesde: new Date(l.estadia_desde) };
+  }
+
+  /** Setores do Menu principal (os do catálogo da jornada que estão ativos) e com qual o hóspede fala agora. */
+  private async menu(c: Ctx, s: SessaoChat): Promise<Pick<ChatView, 'setores' | 'setorAtual'>> {
+    const { cfg } = await this.unidades.versaoAtual(c.tx, s.unidadeId);
+    const ativos = new Set((await this.unidades.setores(c.tx, s.unidadeId)).map((x) => x.chave));
+    const atual = await c.tx.client.query<{ chave: string }>(
+      `SELECT st.chave FROM solicitacao so JOIN solicitante sl ON sl.id = so.solicitante_id JOIN setor st ON st.id = so.setor_id
+        WHERE sl.telefone = $1 AND so.unidade_id = $2 AND so.criado_em >= $3
+          AND so.estado IN ('na_fila', 'oferecida', 'em_atendimento', 'aguardando_solicitante')
+        ORDER BY so.criado_em DESC LIMIT 1`,
+      [solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
+    );
+    return {
+      setores: cfg.setores.filter((x) => ativos.has(x.chave)).map((x) => ({ chave: x.chave, nome: x.nome, nomes: x.nomes })),
+      setorAtual: atual.rows[0]?.chave ?? null,
+    };
   }
 
   private async cabecalho(c: Ctx, unidadeId: string, localId: string) {

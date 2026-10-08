@@ -144,4 +144,19 @@ describe.skipIf(!temBanco)('administração', () => {
     expect(r.corpo.pesquisa.distribuicao).toHaveLength(5);
     expect(r.corpo.setores.find((x: { nome: string }) => x.nome === 'Governança').pedidos).toBeGreaterThanOrEqual(1);
   });
+
+  it('uso do mês para a simulação: pedidos e mensagens por canal, só para gestão', async () => {
+    const r = await A.req('GET', `/admin/relatorio/mes?unidadeId=${A.h.unidadeId}`, undefined, tok);
+    expect(r.status).toBe(200);
+    expect(r.corpo.diasNoMes).toBeGreaterThanOrEqual(28);
+    expect(r.corpo.diasDecorridos).toBeGreaterThan(0);
+    expect(r.corpo.diasDecorridos).toBeLessThanOrEqual(r.corpo.diasNoMes);
+    expect(r.corpo.pedidos.whatsapp).toBeGreaterThanOrEqual(2);
+    expect(r.corpo.mensagensHospede.whatsapp).toBeGreaterThanOrEqual(r.corpo.pedidos.whatsapp);
+    expect(r.corpo.mensagensHotel.whatsapp).toBeGreaterThanOrEqual(1);
+    expect(r.corpo.quartos).toBeGreaterThanOrEqual(1);
+    expect(typeof r.corpo.iaUsd).toBe('number');
+    const tokRita = await A.login(A.h.pessoas.rita.email);
+    expect((await A.req('GET', `/admin/relatorio/mes?unidadeId=${A.h.unidadeId}`, undefined, tokRita)).status).toBe(403);
+  });
 });

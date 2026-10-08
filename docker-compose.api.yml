@@ -83,6 +83,12 @@ x-ambiente-app: &ambiente-app
   # Push do app da equipe (FCM). Vazio = notificações só no log.
   FCM_CONTA_SERVICO_B64: ${FCM_CONTA_SERVICO_B64:-}
 
+  # Notificação no navegador (Web Push): equipe na web e hóspede no chat do quarto. Vazio = desligado.
+  # Gerar: pnpm --filter @ramais/api vapid
+  VAPID_PUBLICA: ${VAPID_PUBLICA:-}
+  VAPID_PRIVADA: ${VAPID_PRIVADA:-}
+  VAPID_CONTATO: ${VAPID_CONTATO:-mailto:contato@ramais.com.br}
+
 services:
   banco:
     image: postgres:18-alpine

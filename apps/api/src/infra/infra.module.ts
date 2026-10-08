@@ -9,6 +9,7 @@ import { Tokens } from './auth.js';
 import { ClienteMeta } from './meta.js';
 import { Nucleo } from './nucleo.js';
 import { PushFcm, PushLog, type Push } from './push.js';
+import { PushWeb } from './push-web.js';
 import { TempoReal } from './tempo-real.js';
 import { BOSS, CONFIG, IA, POOL, PROCESSO, type Processo } from './tokens.js';
 import { Unidades } from './unidades.js';
@@ -93,11 +94,16 @@ export class InfraModule {
           inject: [CONFIG],
           useFactory: (c: Config): Push => (c.FCM_CONTA_SERVICO_B64 ? new PushFcm(c.FCM_CONTA_SERVICO_B64) : new PushLog()),
         },
+        {
+          provide: PushWeb,
+          inject: [CONFIG],
+          useFactory: (c: Config) => new PushWeb(c),
+        },
         Tokens,
         Nucleo,
         Unidades,
       ],
-      exports: [PROCESSO, CONFIG, POOL, BOSS, IA, TempoReal, ClienteMeta, ARMAZENAMENTO, PUSH, Tokens, Nucleo, Unidades],
+      exports: [PROCESSO, CONFIG, POOL, BOSS, IA, TempoReal, ClienteMeta, ARMAZENAMENTO, PUSH, PushWeb, Tokens, Nucleo, Unidades],
     };
   }
 }

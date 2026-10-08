@@ -1,0 +1,44 @@
+/* ============================================================
+   Ramais — Simulação (preço e margem)
+   Entradas, resultado e uso real lado a lado, que empilham no
+   celular; cartões de planos; tabelas que rolam dentro do cartão.
+   Só tokens do DS.
+   ============================================================ */
+
+.sim-topo { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+
+.sim-campos { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.sim-campo { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); justify-items: start; }
+.sim-campo > * { max-width: 100%; }
+.sim-campo > :first-child { width: 100%; }
+.sim-ajuda { margin-top: calc(-1 * var(--space-2)); }
+
+.sim-resultado { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+/* Valor à direita, do tamanho do número; o rótulo é que quebra linha. */
+.pares.sim-pares { grid-template-columns: minmax(0, 1fr) auto; }
+.pares.sim-pares dd { text-align: right; }
+.sim-total { font-weight: var(--weight-semibold); color: var(--text-strong); }
+.sim-separador { border-top: var(--border-hair) solid var(--border-subtle); padding-top: var(--space-3); }
+
+.sim-margem-bloco { display: grid; gap: var(--space-2); border-top: var(--border-hair) solid var(--border-subtle); padding-top: var(--space-4); }
+.sim-margem { font: var(--weight-semibold) var(--text-3xl) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.sim-margem--boa { color: var(--positive-fg); }
+.sim-margem--ruim { color: var(--danger-fg); }
+
+.sim-secao { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); min-width: 0; }
+.sim-titulo { margin: 0; font: var(--weight-semibold) var(--text-lg) / 1.3 var(--font-display); color: var(--text-strong); }
+.sim-texto { margin: 0; max-width: 72ch; font: var(--type-body-sm); color: var(--text-muted); }
+
+.sim-planos { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); align-items: start; }
+.sim-plano { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.sim-preco { font: var(--weight-semibold) var(--text-2xl) / 1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.sim-lista { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-1); font: var(--type-body-sm); }
+
+/* Tabelas largas: no celular o DS vira lista de cartões; entre celular e desktop rolam dentro do cartão. */
+.sim-tabela { overflow-x: auto; min-width: 0; }
+
+/* Premissas: rótulo e valor longos; numa tela estreita o valor desce para baixo do rótulo. */
+@media (max-width: 480px) {
+  .pares.sim-premissas { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .pares.sim-premissas dd { text-align: left; margin-bottom: var(--space-2); }
+}

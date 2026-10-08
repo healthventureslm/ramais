@@ -13,6 +13,8 @@ import { IA } from '../../infra/tokens.js';
 import { Unidades } from '../../infra/unidades.js';
 
 const MAX_TENTATIVAS = 8;
+/** Corpo do aviso no navegador do hóspede quando a equipe manda foto ou áudio sem texto. */
+const AVISO_MIDIA = { pt: 'Nova mensagem do hotel', es: 'Nuevo mensaje del hotel', en: 'New message from the hotel' } as const;
 const JANELA_MS = 24 * 3600_000;
 
 /**
@@ -48,7 +50,9 @@ export class Saida {
                 (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'transcricao'
                   ORDER BY d.criado_em DESC LIMIT 1) AS transcricao,
                 s.id AS solicitacao_id, s.idioma AS idioma_destino, s.ultima_msg_solicitante_em, s.jornada_versao_id,
-                s.resumo, s.unidade_id, s.teste, st.telefone, cw.phone_number_id, cw.credencial_ref, cw.tipo AS canal_tipo
+                s.resumo, s.unidade_id, s.teste, s.local_id, st.telefone, cw.phone_number_id, cw.credencial_ref, cw.tipo AS canal_tipo,
+                (SELECT u.nome FROM unidade u WHERE u.id = s.unidade_id) AS hotel,
+                (SELECT l.codigo_qr FROM local l WHERE l.id = s.local_id) AS codigo_qr
            FROM mensagem m
            JOIN solicitacao s ON s.id = m.solicitacao_id
            JOIN solicitante st ON st.id = s.solicitante_id
@@ -133,6 +137,19 @@ export class Saida {
       }
       if (foraDaJanela) {
         await this.nucleo.evento(c, { solicitacaoId: dados.solicitacao_id, tipo: 'enviada_por_template', atorTipo: 'sistema', dados: { mensagemId } });
+      }
+      // Chat do quarto: o hóspede pode estar com a página fechada. Avisa no navegador dele
+      // (o service worker não mostra nada se o chat estiver aberto na tela).
+      if (web && !dados.teste && dados.local_id && dados.codigo_qr) {
+        await this.nucleo.enfileirar(c, 'notificacao', {
+          orgId,
+          localId: dados.local_id,
+          titulo: dados.hotel ?? 'Hotel',
+          corpo: (texto || AVISO_MIDIA[idiomaDosTextos(dados.idioma_destino)]).slice(0, 180),
+          dados: { tipo: 'chat', solicitacaoId: dados.solicitacao_id },
+          alta: false,
+          url: `/q/${dados.codigo_qr}`,
+        });
       }
       c.ef.depois(() =>
         this.nucleo.tempoReal.emitir(sala.solicitacao(dados.solicitacao_id), 'solicitacao:mensagem', {

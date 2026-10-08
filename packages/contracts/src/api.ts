@@ -163,6 +163,15 @@ export const MidiaDiretaReq = ArquivoMidia.extend({
 });
 export type MidiaDiretaReq = z.infer<typeof MidiaDiretaReq>;
 
+// ---------- Notificação no navegador (Web Push) ----------
+
+/** Inscrição do navegador (PushSubscription.toJSON()), igual para a equipe e para o chat do quarto. */
+export const InscricaoPushReq = z.object({
+  endpoint: z.url().max(1000),
+  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+});
+export type InscricaoPushReq = z.infer<typeof InscricaoPushReq>;
+
 // ---------- Chat do quarto (QR → chat no navegador do hóspede) ----------
 
 export const ChatSessaoReq = z.object({
@@ -209,6 +218,10 @@ export interface ChatView {
   /** Idioma em que o hóspede está escrevendo (o da conversa), quando já se sabe. A tela o segue. */
   idioma: string | null;
   mensagens: ChatMensagemView[];
+  /** Menu principal: setores que o hóspede pode escolher (nome em PT; `nomes` em ES/EN). */
+  setores: { chave: string; nome: string; nomes: { es?: string; en?: string } }[];
+  /** Setor com que o hóspede está falando agora, se algum. */
+  setorAtual: string | null;
 }
 
 // ---------- Dashboard ----------

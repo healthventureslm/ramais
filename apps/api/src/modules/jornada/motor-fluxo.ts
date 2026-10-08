@@ -49,6 +49,16 @@ export interface EstadoFluxo {
 
 type Passo = { r: 'seguir' } | { r: 'aguardar' } | { r: 'fim' };
 
+/**
+ * Resposta a "bom dia", "oi", "preciso de ajuda" no chat do quarto. Fora de PT/ES/EN, sai em inglês
+ * e a saída traduz para o idioma do hóspede.
+ */
+const SAUDACAO_CHAT = {
+  pt: 'Olá! Escreva aqui o que você precisa, do seu jeito, que a gente encaminha para o setor certo. Se preferir ir direto a um setor, toque em "Menu principal", no alto do chat, e escolha.',
+  es: '¡Hola! Escriba aquí lo que necesita, como prefiera, y lo enviamos al sector indicado. Si prefiere ir directo a un sector, toque "Menú principal", arriba del chat, y elija.',
+  en: 'Hi! Write what you need here, in your own words, and we will send it to the right team. If you would rather go straight to a department, tap "Main menu" at the top of the chat and choose.',
+};
+
 const ETAPAS_AUTOMACAO = ['entrada', 'identificacao', 'resolucao', 'atendimento'] as const;
 
 function novoEstado(): EstadoFluxo {
@@ -244,7 +254,9 @@ export class MotorFluxo {
           if (b.perguntarSeVago && !st.perguntouDetalhe) {
             st.perguntouDetalhe = true;
             st.aguardando = { blocoId: b.id, motivo: 'detalhe', tentativas: 0 };
-            await this.acoes.enviarTextoFixo(c, s, 'pedir_detalhe');
+            // Chat do quarto tem o Menu principal no alto: a saudação ensina os dois caminhos.
+            if (await this.chatDoQuarto(c, s)) await this.acoes.enviarConteudo(c, s, { tipo: 'livre', texto: SAUDACAO_CHAT });
+            else await this.acoes.enviarTextoFixo(c, s, 'pedir_detalhe');
             return { r: 'aguardar' };
           }
           st.decisao = { ...p, setor: cfg.setorFallback, acao: 'recepcao' };
@@ -283,6 +295,12 @@ export class MotorFluxo {
       case 'pesquisa':
         return { r: 'seguir' }; // só roda no encerramento
     }
+  }
+
+  private async chatDoQuarto(c: Ctx, s: SolicitacaoRow): Promise<boolean> {
+    if (!s.canal_id) return false;
+    const r = await c.tx.client.query<{ tipo: string }>('SELECT tipo FROM canal_whatsapp WHERE id = $1', [s.canal_id]);
+    return r.rows[0]?.tipo === 'web';
   }
 
   private vars(st: EstadoFluxo, cfg: ConfigUnidade, s: SolicitacaoRow): Record<string, string> {

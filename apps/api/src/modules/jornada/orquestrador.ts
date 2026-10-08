@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { CampoColeta, Gatilho, ResultadoRoteamento } from '@ramais/contracts';
 import type { ServicosIA, Traducao } from '@ramais/ai';
 import {
@@ -110,6 +110,106 @@ export class Orquestrador {
       const analise = await this.analisar(e, preparo);
       await this.aplicar(e, preparo, analise);
     });
+  }
+
+  /**
+   * Menu principal do chat do quarto: o hóspede escolhe o setor com quem quer falar, a qualquer
+   * momento. Com um atendimento aberto na estadia, ele vai para esse setor (transferência, como a
+   * equipe faria); sem nenhum, abre um já na fila do setor. A próxima mensagem do hóspede segue
+   * para lá, sem passar pela IA. Mesma trava da conversa que as mensagens usam.
+   */
+  async escolherSetor(p: {
+    orgId: string;
+    unidadeId: string;
+    canalId: string;
+    localId: string;
+    naoAntesDe: string;
+    chave: string;
+  }): Promise<{ setor: string; jaEstava: boolean }> {
+    const telefone = solicitanteDoQuarto(p.localId);
+    return this.nucleo.executar(
+      p.orgId,
+      async (c) => {
+        const { id: versaoAtual, cfg } = await this.unidades.versaoAtual(c.tx, p.unidadeId);
+        const setor = cfg.setores.some((x) => x.chave === p.chave) ? await this.unidades.setorPorChave(c.tx, p.unidadeId, p.chave) : null;
+        if (!setor) throw new NotFoundException('setor não encontrado');
+        const sol = await c.tx.client.query<{ id: string }>(
+          `INSERT INTO solicitante (org_id, telefone, nome) SELECT $1, $2, 'Quarto ' || l.identificador FROM local l WHERE l.id = $3
+           ON CONFLICT (org_id, telefone) DO UPDATE SET nome = coalesce(solicitante.nome, EXCLUDED.nome) RETURNING id`,
+          [p.orgId, telefone, p.localId],
+        );
+        const solicitanteId = sol.rows[0]!.id;
+        // O atendimento com que o hóspede está falando agora (o mesmo que receberia a próxima mensagem).
+        const r = await c.tx.client.query<SolicitacaoRow>(
+          `SELECT * FROM solicitacao s WHERE s.solicitante_id = $1 AND s.unidade_id = $2 AND s.origem = 'externa' AND s.criado_em >= $3
+              AND NOT EXISTS (SELECT 1 FROM solicitacao o WHERE o.id::text = s.contexto->>'paralelaDe'
+                                AND o.estado NOT IN ('resolvida', 'encerrada', 'cancelada'))
+            ORDER BY s.criado_em DESC LIMIT 1 FOR UPDATE OF s`,
+          [solicitanteId, p.unidadeId, p.naoAntesDe],
+        );
+        const atual = r.rows[0];
+        const aberta = atual && ['automacao', 'na_fila', 'oferecida', 'em_atendimento', 'aguardando_solicitante'].includes(atual.estado) ? atual : null;
+        if (aberta && aberta.setor_id === setor.id && aberta.estado !== 'automacao') return { setor: setor.nome, jaEstava: true };
+
+        let s: SolicitacaoRow;
+        if (aberta) {
+          s = aberta;
+          const de = s.setor_id ? await this.unidades.setorPorId(c.tx, s.setor_id) : null;
+          await this.acoes.notaInterna(
+            c,
+            s.id,
+            de ? `O hóspede escolheu ${setor.nome} no menu do chat (estava com ${de.nome}).` : `O hóspede escolheu ${setor.nome} no menu do chat.`,
+            { tipo: 'sistema' },
+          );
+        } else {
+          // O mesmo idioma da conversa anterior da estadia, se já se sabe.
+          const idioma = atual && (atual.contexto as { idiomaDefinido?: boolean }).idiomaDefinido ? atual.idioma : null;
+          const v = await c.tx.client.query<{ confirmado: boolean }>(
+            `SELECT confirmado FROM vinculo WHERE solicitante_id = $1 AND unidade_id = $2 AND local_id = $3 AND fim > now()
+              ORDER BY confirmado DESC, inicio DESC LIMIT 1`,
+            [solicitanteId, p.unidadeId, p.localId],
+          );
+          const ins = await c.tx.client.query<SolicitacaoRow>(
+            `INSERT INTO solicitacao (org_id, unidade_id, solicitante_id, canal_id, origem, estado, etapa, jornada_versao_id,
+                                      local_id, identificado, idioma, contexto)
+             VALUES ($1, $2, $3, $4, 'externa', 'automacao', 'entrada', $5, $6, $7, $8, $9) RETURNING *`,
+            [
+              p.orgId,
+              p.unidadeId,
+              solicitanteId,
+              p.canalId,
+              versaoAtual,
+              p.localId,
+              v.rows[0]?.confirmado ?? false,
+              idioma ?? 'pt',
+              JSON.stringify({ idiomaDefinido: Boolean(idioma), peloMenu: true }),
+            ],
+          );
+          s = ins.rows[0]!;
+          await this.nucleo.evento(c, { solicitacaoId: s.id, tipo: 'criada', atorTipo: 'solicitante', atorId: solicitanteId, dados: { menu: setor.chave } });
+        }
+        const ctx = s.contexto as { fluxo?: EstadoFluxo };
+        // Parou de esperar resposta do fluxo (ex.: "como podemos ajudar?"): agora é com o setor.
+        // Sem resumo ainda ("bom dia" e o menu): a próxima fala do hóspede vira o resumo.
+        if (ctx.fluxo || !s.resumo) {
+          s = await this.acoes.atualizar(c, s, {
+            contexto: {
+              ...s.contexto,
+              ...(ctx.fluxo ? { fluxo: { ...ctx.fluxo, aguardando: null, encaminhou: true } } : {}),
+              ...(!s.resumo ? { peloMenu: true } : {}),
+            },
+          });
+        }
+        const nova = await this.acoes.colocarNaFila(c, s, setor.id, {
+          ator: { tipo: 'solicitante', id: solicitanteId },
+          motivo: 'menu_hospede',
+          resumo: s.resumo ?? `Hóspede escolheu ${setor.nome} no menu do chat`,
+        });
+        await this.acoes.enviarEncaminhado(c, nova, setor);
+        return { setor: setor.nome, jaEstava: false };
+      },
+      { trava: `conversa:${p.canalId}:${telefone}` },
+    );
   }
 
   // ------------------------------------------------------------------
@@ -448,6 +548,11 @@ export class Orquestrador {
         }
 
         if (novo && rot && (await this.assuntoNovo(c, s, a, rot, decisaoId, p.mensagemId))) return;
+
+        // Aberto pelo menu: a primeira fala do hóspede vira o resumo que a equipe lê.
+        if ((s.contexto as { peloMenu?: boolean }).peloMenu && a.textoBase) {
+          s = await this.acoes.atualizar(c, s, { resumo: this.textoPt(a), contexto: { ...s.contexto, peloMenu: false } });
+        }
 
         switch (s.estado) {
           case 'automacao':

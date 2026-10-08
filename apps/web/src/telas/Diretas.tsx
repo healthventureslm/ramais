@@ -1,7 +1,7 @@
-import { Avatar, Badge, Button, ChatBubble, EmptyState, IconButton, Input, ListGroup, ListItem, StatusDot, Switch, Textarea } from '@healthventureslm/design-system';
+import { Avatar, Badge, Button, ChatBubble, EmptyState, IconButton, Input, ListGroup, ListItem, SegmentedControl, StatusDot, Switch, Textarea } from '@healthventureslm/design-system';
 import type { Sessao } from '@ramais/contracts';
-import { ArrowLeft, MessagesSquare, Search } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, MessagesSquare, Search, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ConversaDireta, type MensagemDireta, type PessoaBusca } from '../api';
 import { avisar } from '../componentes/Avisos';
 import { AnexarMidia, MidiaMensagem } from '../componentes/Midia';
@@ -16,6 +16,17 @@ const iniciais = (n: string) =>
     .map((p) => p[0]!.toUpperCase())
     .join('');
 
+const semAcento = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/** Online (app ou web aberta), no turno sem estar com o app aberto, ou fora. */
+function Presenca({ p }: { p: PessoaBusca }) {
+  if (p.online) return <StatusDot status="positive">Online</StatusDot>;
+  if (p.emTurno) return <StatusDot status="info">No turno</StatusDot>;
+  return <StatusDot status="neutral">Fora do turno</StatusDot>;
+}
+
+const ocupacao = (p: PessoaBusca) => (p.atendendo > 0 ? `Atendendo ${p.atendendo}` : p.online || p.emTurno ? 'Livre' : null);
+
 /**
  * Mensagem direta, como ramal: para uma pessoa exata, com status. A urgente toca no celular e pede ciente.
  * Texto, foto ou áudio (com a transcrição embaixo).
@@ -25,7 +36,8 @@ export function Diretas({ sessao, unidadeId }: { sessao: Sessao; unidadeId: stri
   const [aberta, setAberta] = useState<{ id: string | null; pessoa: { id: string; nome: string } } | null>(null);
   const [mensagens, setMensagens] = useState<MensagemDireta[]>([]);
   const [busca, setBusca] = useState('');
-  const [pessoas, setPessoas] = useState<PessoaBusca[]>([]);
+  const [aba, setAba] = useState<'equipe' | 'conversas'>('equipe');
+  const [equipe, setEquipe] = useState<PessoaBusca[] | null>(null);
   const [texto, setTexto] = useState('');
   const [urgente, setUrgente] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -51,14 +63,40 @@ export function Diretas({ sessao, unidadeId }: { sessao: Sessao; unidadeId: stri
     if (p.conversaId === aberta?.id) carregarMensagens();
   });
 
+  // A equipe inteira, com presença e ocupação; atualiza sozinha enquanto a tela está aberta.
+  const carregarEquipe = useCallback(() => {
+    api
+      .pessoas(unidadeId, '')
+      .then((l) => setEquipe(l.filter((p) => p.id !== sessao.pessoa.id)))
+      .catch(() => setEquipe((e) => e ?? []));
+  }, [unidadeId, sessao.pessoa.id]);
   useEffect(() => {
-    if (!busca.trim()) {
-      setPessoas([]);
-      return;
-    }
-    const t = setTimeout(() => api.pessoas(unidadeId, busca).then((l) => setPessoas(l.filter((p) => p.id !== sessao.pessoa.id))), 200);
-    return () => clearTimeout(t);
-  }, [busca, unidadeId, sessao.pessoa.id]);
+    carregarEquipe();
+    const t = setInterval(carregarEquipe, 15_000);
+    return () => clearInterval(t);
+  }, [carregarEquipe]);
+  useEvento('solicitacao:atualizada', () => {
+    if (aba === 'equipe') carregarEquipe();
+  });
+
+  const filtro = semAcento(busca.trim());
+  const equipeFiltrada = useMemo(
+    () => (equipe ?? []).filter((p) => !filtro || semAcento(`${p.nome} ${p.setores ?? ''}`).includes(filtro)),
+    [equipe, filtro],
+  );
+  const conversasFiltradas = useMemo(
+    () => (conversas ?? []).filter((c) => !filtro || semAcento(c.outros?.map((o) => o.nome).join(' ') ?? '').includes(filtro)),
+    [conversas, filtro],
+  );
+  const online = equipe?.filter((p) => p.online).length ?? 0;
+  const urgentes = conversas?.reduce((n, c) => n + c.urgentes_pendentes, 0) ?? 0;
+  const presencaDe = (id: string) => equipe?.find((p) => p.id === id);
+  const presencaAberta = aberta ? presencaDe(aberta.pessoa.id) : undefined;
+
+  function abrirPessoa(p: { id: string; nome: string }) {
+    const existente = conversas?.find((c) => c.outros?.some((o) => o.id === p.id) && !c.solicitacao_id);
+    setAberta({ id: existente?.id ?? null, pessoa: { id: p.id, nome: p.nome } });
+  }
 
   function enviado(r: { conversaId: string; foraDoTurno: boolean; destinatario: string }) {
     if (!aberta) return;
@@ -86,33 +124,49 @@ export function Diretas({ sessao, unidadeId }: { sessao: Sessao; unidadeId: stri
     <div className={`diretas ${aberta ? 'diretas--aberta' : ''}`}>
       <section className="diretas__lista" aria-label="Conversas">
         <div className="diretas__busca">
-          <Input iconLeft={<Search />} placeholder="Buscar por nome ou setor" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar pessoa" />
+          <SegmentedControl
+            block
+            value={aba}
+            onChange={(v) => setAba(v as 'equipe' | 'conversas')}
+            options={[
+              { value: 'equipe', label: 'Equipe', count: online },
+              { value: 'conversas', label: 'Conversas', ...(urgentes > 0 ? { count: urgentes, tone: 'danger' as const } : {}) },
+            ]}
+          />
+          <Input iconLeft={<Search />} placeholder="Filtrar por nome ou setor" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Filtrar pessoas" />
         </div>
-        {busca.trim() ? (
-          <ListGroup plain>
-            {pessoas.length === 0 && <EmptyState size="sm" title="Ninguém encontrado" description="Tente o nome do setor, como manutenção ou recepção." />}
-            {pessoas.map((p) => (
-              <ListItem
-                key={p.id}
-                onClick={() => {
-                  const existente = conversas?.find((c) => c.outros?.some((o) => o.id === p.id) && !c.solicitacao_id);
-                  setAberta({ id: existente?.id ?? null, pessoa: { id: p.id, nome: p.nome } });
-                  setBusca('');
-                }}
-                media={<Avatar name={p.nome} size="sm" />}
-                title={p.nome}
-                subtitle={p.setores ?? undefined}
-                meta={<StatusDot status={p.emTurno ? 'positive' : 'neutral'}>{p.emTurno ? 'no turno' : 'fora'}</StatusDot>}
-              />
-            ))}
-          </ListGroup>
+        {aba === 'equipe' ? (
+          equipe === null ? (
+            <EmptyState loading size="sm" />
+          ) : equipeFiltrada.length === 0 ? (
+            <EmptyState size="sm" icon={<Users />} title="Ninguém encontrado" description="Tente o nome do setor, como manutenção ou recepção." />
+          ) : (
+            <ListGroup plain>
+              {equipeFiltrada.map((p) => (
+                <ListItem
+                  key={p.id}
+                  active={aberta?.pessoa.id === p.id}
+                  onClick={() => abrirPessoa(p)}
+                  media={<Avatar name={p.nome} size="sm" />}
+                  title={p.nome}
+                  subtitleParts={[p.setores ?? 'Sem setor', ocupacao(p)].filter(Boolean)}
+                  meta={<Presenca p={p} />}
+                />
+              ))}
+            </ListGroup>
+          )
         ) : conversas === null ? (
           <EmptyState loading size="sm" />
-        ) : conversas.length === 0 ? (
-          <EmptyState size="sm" icon={<MessagesSquare />} title="Nenhuma conversa ainda" description="Busque alguém da equipe pelo nome ou pelo setor." />
+        ) : conversasFiltradas.length === 0 ? (
+          <EmptyState
+            size="sm"
+            icon={<MessagesSquare />}
+            title={filtro ? 'Nenhuma conversa com esse nome' : 'Nenhuma conversa ainda'}
+            description="Na aba Equipe aparece todo mundo; toque em alguém para escrever."
+          />
         ) : (
           <ListGroup plain>
-            {conversas.map((c) => {
+            {conversasFiltradas.map((c) => {
               const outro = c.outros?.[0];
               if (!outro) return null;
               const minha = c.ultima?.autor_id === sessao.pessoa.id;
@@ -129,7 +183,7 @@ export function Diretas({ sessao, unidadeId }: { sessao: Sessao; unidadeId: stri
                     </span>
                   }
                   subtitle={c.ultima ? `${minha ? 'Você: ' : ''}${c.ultima.tipo === 'audio' ? 'Mensagem de voz' : c.ultima.tipo === 'imagem' ? `Foto${c.ultima.texto ? `: ${c.ultima.texto}` : ''}` : c.ultima.texto}` : undefined}
-                  meta={c.ultima ? hora(c.ultima.criado_em) : undefined}
+                  meta={presencaDe(outro.id)?.online ? <StatusDot status="positive">{c.ultima ? hora(c.ultima.criado_em) : 'Online'}</StatusDot> : c.ultima ? hora(c.ultima.criado_em) : undefined}
                 />
               );
             })}
@@ -148,7 +202,14 @@ export function Diretas({ sessao, unidadeId }: { sessao: Sessao; unidadeId: stri
             <Avatar name={aberta.pessoa.nome} size="sm" />
             <div className="conversa__quem">
               <strong>{aberta.pessoa.nome}</strong>
-              <span>Mensagem direta</span>
+              {presencaAberta ? (
+                <span className="linha">
+                  <Presenca p={presencaAberta} />
+                  {ocupacao(presencaAberta) && <span>· {ocupacao(presencaAberta)}</span>}
+                </span>
+              ) : (
+                <span>Mensagem direta</span>
+              )}
             </div>
           </header>
           <div className="conversa__mensagens">
@@ -217,7 +278,7 @@ export function Diretas({ sessao, unidadeId }: { sessao: Sessao; unidadeId: stri
         </section>
       ) : (
         <div className="atendimentos__vazio">
-          <EmptyState align="center" icon={<MessagesSquare />} title="Escolha uma conversa" description="Ou busque alguém da equipe pelo nome ou pelo setor." />
+          <EmptyState align="center" icon={<MessagesSquare />} title="Escolha alguém da equipe" description="Quem está online aparece primeiro, com quantos atendimentos tem abertos." />
         </div>
       )}
     </div>

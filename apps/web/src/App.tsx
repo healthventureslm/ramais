@@ -1,12 +1,13 @@
-import { ActionSheet, Button, EmptyState, HVProvider, NavBar, Spinner, TabBar, TopNav, useConfirm, useViewport } from '@healthventureslm/design-system';
+import { ActionSheet, Banner, Button, EmptyState, HVProvider, NavBar, Spinner, TabBar, TopNav, useConfirm, useViewport } from '@healthventureslm/design-system';
 import type { Sessao } from '@ramais/contracts';
-import { BarChart3, Inbox, LayoutDashboard, Menu as IconeMenu, MessagesSquare, Radio, Settings2, Workflow } from 'lucide-react';
+import { BarChart3, Bell, Calculator, Inbox, LayoutDashboard, Menu as IconeMenu, MessagesSquare, Radio, Settings2, Workflow } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { aparenciaSalva, NOMES_APARENCIA, salvarAparencia, type Aparencia } from './aparencia';
 import { api, quandoExpirar, salvarSessao, sessaoSalva, type Eu } from './api';
 import { Avisos, avisar } from './componentes/Avisos';
 import { TrocarSenha } from './componentes/Conta';
 import { Ofertas } from './componentes/Ofertas';
+import { ativarEquipe, desativarEquipe, estadoNotificacao, type EstadoNotificacao } from './notificacoes';
 import { conectar, desconectar, useEvento } from './tempo-real';
 import { Atendimentos } from './telas/Atendimentos';
 import { Diretas } from './telas/Diretas';
@@ -18,13 +19,35 @@ import { Painel } from './telas/Painel';
 const Admin = lazy(() => import('./telas/Admin').then((m) => ({ default: m.Admin })));
 const Dashboard = lazy(() => import('./telas/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Jornada = lazy(() => import('./telas/Jornada').then((m) => ({ default: m.Jornada })));
+const Simulacao = lazy(() => import('./telas/Simulacao').then((m) => ({ default: m.Simulacao })));
 
-type Tela = 'atendimentos' | 'painel' | 'diretas' | 'relatorio' | 'admin' | 'jornada';
+type Tela = 'atendimentos' | 'painel' | 'diretas' | 'relatorio' | 'simulacao' | 'admin' | 'jornada';
+
+/** "Agora não" no convite para ativar as notificações: volta a perguntar depois de uma semana. */
+const CHAVE_ADIADO = 'ramais.notificacoes.adiado';
+const adiado = () => {
+  try {
+    return Date.now() - Number(localStorage.getItem(CHAVE_ADIADO) ?? 0) < 7 * 86_400_000;
+  } catch {
+    return false;
+  }
+};
+
+/** O toque num aviso do navegador abre o Ramais em /?abrir=<atendimento> ou /?tela=diretas. */
+function destinoDaUrl(url: string): { tela: Tela; abrir: string | null } | null {
+  const q = new URL(url, window.location.origin).searchParams;
+  if (q.get('tela') === 'diretas') return { tela: 'diretas', abrir: null };
+  const id = q.get('abrir');
+  return id && /^[0-9a-f-]{36}$/i.test(id) ? { tela: 'atendimentos', abrir: id } : null;
+}
 
 export function App() {
   const [sessao, setSessao] = useState<Sessao | null>(() => sessaoSalva());
 
   const sair = useCallback(() => {
+    // Este navegador para de receber os avisos de quem saiu.
+    const token = sessaoSalva()?.token;
+    if (token) void desativarEquipe(token);
     salvarSessao(null);
     desconectar();
     setSessao(null);
@@ -86,6 +109,71 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
     onSelect: () => mudarAparencia(a),
   }));
 
+  // Notificação no navegador: quem já permitiu é reinscrito em silêncio (chave nova, navegador novo).
+  const [notificacao, setNotificacao] = useState<EstadoNotificacao | null>(null);
+  const [convite, setConvite] = useState(() => !adiado());
+  useEffect(() => {
+    void estadoNotificacao().then((e) => {
+      setNotificacao(e);
+      if (e === 'ativa') void ativarEquipe(sessao.token, false).catch(() => undefined);
+    });
+  }, [sessao.token]);
+  async function ativarNotificacoes() {
+    try {
+      const e = await ativarEquipe(sessao.token);
+      setNotificacao(e);
+      if (e === 'ativa') avisar('Notificações ativas neste navegador.', 'success');
+      else if (e === 'bloqueada') avisar('O navegador bloqueou as notificações. Libere nas permissões do site e tente de novo.', 'warning');
+    } catch (e) {
+      avisar(`Não deu para ativar as notificações: ${(e as Error).message}`, 'error');
+    }
+  }
+  function adiarConvite() {
+    try {
+      localStorage.setItem(CHAVE_ADIADO, String(Date.now()));
+    } catch {
+      // sem armazenamento: some só nesta aba
+    }
+    setConvite(false);
+  }
+  const itemNotificacao =
+    notificacao === null || notificacao === 'indisponivel'
+      ? []
+      : [
+          {
+            id: 'notificacoes',
+            label:
+              notificacao === 'ativa' ? 'Notificações: ativas' : notificacao === 'bloqueada' ? 'Notificações: bloqueadas no navegador' : 'Ativar notificações',
+            onSelect: () =>
+              notificacao === 'ativa'
+                ? avisar('Este navegador já recebe os avisos, mesmo com o Ramais fechado.', 'info')
+                : notificacao === 'bloqueada'
+                  ? avisar('Libere as notificações nas permissões do site (cadeado na barra de endereço).', 'warning')
+                  : void ativarNotificacoes(),
+          },
+        ];
+
+  // Veio de um aviso do navegador (página nova) ou o aviso foi tocado com o Ramais aberto.
+  useEffect(() => {
+    const d = destinoDaUrl(window.location.href);
+    if (d) {
+      setTela(d.tela);
+      if (d.abrir) setAbrir(d.abrir);
+      window.history.replaceState(null, '', '/');
+    }
+    if (!('serviceWorker' in navigator)) return;
+    const h = (e: MessageEvent<{ tipo?: string; url?: string }>) => {
+      if (e.data?.tipo !== 'abrir' || !e.data.url) return;
+      const x = destinoDaUrl(e.data.url);
+      if (!x) return;
+      setTela(x.tela);
+      if (x.tela === 'diretas') setDiretasNovas(0);
+      if (x.abrir) setAbrir(x.abrir);
+    };
+    navigator.serviceWorker.addEventListener('message', h);
+    return () => navigator.serviceWorker.removeEventListener('message', h);
+  }, []);
+
   const recarregarEu = useCallback(() => {
     api.eu().then(setEu).catch(() => undefined);
   }, []);
@@ -99,6 +187,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
     if (!gestao) return;
     const baixar = () => {
       void import('./telas/Dashboard');
+      void import('./telas/Simulacao');
       if (sessao.pessoa.admin) {
         void import('./telas/Jornada');
         void import('./telas/Admin');
@@ -167,6 +256,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
     painel: <LayoutDashboard />,
     diretas: <MessagesSquare />,
     relatorio: <BarChart3 />,
+    simulacao: <Calculator />,
     jornada: <Workflow />,
     admin: <Settings2 />,
   };
@@ -175,7 +265,12 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
     { id: 'painel', nome: 'Painel' },
     { id: 'diretas', nome: 'Mensagens' },
     // Gerência e administração veem o dashboard; só a administração configura.
-    ...(sessao.pessoa.admin || sessao.pessoa.gerente ? [{ id: 'relatorio' as const, nome: 'Dashboard' }] : []),
+    ...(sessao.pessoa.admin || sessao.pessoa.gerente
+      ? [
+          { id: 'relatorio' as const, nome: 'Dashboard' },
+          { id: 'simulacao' as const, nome: 'Simulação' },
+        ]
+      : []),
     ...(sessao.pessoa.admin
       ? [
           { id: 'jornada' as const, nome: 'Jornada' },
@@ -205,6 +300,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
             { type: 'heading' as const, label: 'Aparência' },
             ...opcoesAparencia,
             { type: 'separator' as const },
+            ...itemNotificacao,
             { id: 'conta', label: 'Minha conta', onSelect: () => setMinhaConta(true) },
             { id: 'sair', label: 'Sair', danger: true, onSelect: aoSair },
           ]}
@@ -222,6 +318,25 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
         <div />
       )}
 
+      <div className="casca__faixa">
+        {notificacao === 'pendente' && convite && (
+          <Banner
+            icon={<Bell />}
+            title="Receba os avisos com o Ramais fechado"
+            description="Pedido novo, mensagem do hóspede, nota interna e mensagem da equipe aparecem como notificação neste navegador."
+            actions={
+              <>
+                <Button size="sm" onClick={() => void ativarNotificacoes()}>
+                  Ativar
+                </Button>
+                <Button size="sm" variant="ghost" onClick={adiarConvite}>
+                  Agora não
+                </Button>
+              </>
+            }
+          />
+        )}
+      </div>
       <main className="casca__miolo">
         {tela === 'atendimentos' && (
           <Atendimentos sessao={sessao} unidadeId={unidadeId} abrir={abrir} aoAbrir={setAbrir} emTurno={emTurno} aoAlternarTurno={alternarTurno} />
@@ -247,13 +362,14 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
           {tela === 'admin' && <Admin unidadeId={unidadeId} unidadeNome={unidadeNome} euId={sessao.pessoa.id} />}
           {tela === 'jornada' && <Jornada unidadeId={unidadeId} />}
           {tela === 'relatorio' && <Dashboard unidadeId={unidadeId} unidadeNome={unidadeNome} />}
+          {tela === 'simulacao' && <Simulacao unidadeId={unidadeId} unidadeNome={unidadeNome} />}
         </Suspense>
       </main>
 
       {isMobile && !emConversa && (
         <TabBar
           variant="solid"
-          activeId={['jornada', 'admin', 'relatorio'].includes(tela) ? 'mais' : tela}
+          activeId={['jornada', 'admin', 'relatorio', 'simulacao'].includes(tela) ? 'mais' : tela}
           onSelect={(id) => (id === 'mais' ? setMais(true) : ir(id as Tela))}
           items={[
             ...telas.slice(0, 3).map((t) => ({ id: t.id, label: t.nome, icon: icones[t.id], badge: t.id === 'diretas' && diretasNovas ? diretasNovas : undefined })),
@@ -279,6 +395,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
               setEscolherAparencia(true);
             },
           },
+          ...itemNotificacao,
           { id: 'conta', label: 'Minha conta', onSelect: () => setMinhaConta(true) },
           { id: 'sair', label: 'Sair da conta', danger: true, onSelect: aoSair },
         ]}

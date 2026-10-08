@@ -84,6 +84,17 @@ describe.skipIf(!temBanco)('chat do quarto', () => {
     expect(saida[0].wa_message_id).toMatch(/^web\./);
   }, 40_000);
 
+  it('a equipe encerra e o hóspede fica sabendo no chat', async () => {
+    const s = await abrir();
+    const sol = await conversaDoQuarto();
+    expect((await A.req('POST', `/solicitacoes/${sol.id}/encerrar`, undefined, tokMarcos)).status).toBe(200);
+    const aviso = await A.esperar(async () => {
+      const r = await chat('GET', '/chat', s.token);
+      return r.corpo.mensagens.find((m: { texto: string | null }) => m.texto?.startsWith('Encerramos este atendimento'));
+    });
+    expect(aviso.autor).toBe('automatica');
+  }, 40_000);
+
   it('áudio do hóspede chega transcrito, e o outro celular do quarto vê a mesma conversa', async () => {
     A.fingirTranscricao('A toalha também está faltando.');
     const s = await abrir();
@@ -108,8 +119,11 @@ describe.skipIf(!temBanco)('chat do quarto', () => {
   it('o próximo hóspede não vê a conversa do anterior e começa um pedido novo', async () => {
     const anterior = await conversaDoQuarto();
     // A estadia anterior acabou: as mensagens ficaram antes do check-in do hóspede atual (ontem).
-    await A.consulta(`UPDATE mensagem SET criado_em = now() - interval '3 days' WHERE solicitacao_id = $1`, [anterior.id]);
-    await A.consulta(`UPDATE solicitacao SET criado_em = now() - interval '3 days' WHERE id = $1`, [anterior.id]);
+    await A.consulta(
+      `UPDATE mensagem SET criado_em = now() - interval '3 days' WHERE solicitacao_id IN (SELECT id FROM solicitacao WHERE solicitante_id = $1)`,
+      [anterior.solicitante_id],
+    );
+    await A.consulta(`UPDATE solicitacao SET criado_em = now() - interval '3 days' WHERE solicitante_id = $1`, [anterior.solicitante_id]);
     const s = await abrir();
     expect((await chat('GET', '/chat', s.token)).corpo.mensagens).toEqual([]);
 

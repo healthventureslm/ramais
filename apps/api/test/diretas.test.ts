@@ -2,6 +2,7 @@
  * Mensagens diretas (o "ramal" entre pessoas): busca por nome ou setor, envio, urgente com
  * "ciente" e push que toca no celular de quem recebe.
  */
+import { io } from 'socket.io-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { subirAmbiente, temBanco, type Ambiente } from './ambiente.js';
 
@@ -48,5 +49,35 @@ describe.skipIf(!temBanco)('mensagens diretas', () => {
     // Resposta cai na mesma conversa.
     const resp = await req('POST', '/diretas', { paraPessoaId: h.pessoas.marcos.id, texto: 'Separado!', urgente: false }, tokRita);
     expect(resp.corpo.conversaId).toBe(env.corpo.conversaId);
+  });
+
+  it('sem busca, lista a equipe toda: online primeiro, depois no turno, com quantos atende', async () => {
+    const { h, req, login } = A;
+    const tokMarcos = await login(h.pessoas.marcos.email);
+    const tokMauro = await login(h.pessoas.mauro.email);
+    // Mauro com a web aberta (socket de tempo real conectado).
+    const sock = io(A.base, { path: '/tempo-real', transports: ['websocket'], auth: { token: tokMauro } });
+    await new Promise<void>((ok, erro) => {
+      sock.on('connect', () => ok());
+      sock.on('connect_error', erro);
+    });
+    try {
+      const equipe = await A.esperar(async () => {
+        const r = await req('GET', `/pessoas?unidadeId=${h.unidadeId}&busca=`, undefined, tokMarcos);
+        return r.corpo[0]?.online ? r.corpo : null;
+      });
+      const nomes = equipe.map((p: { nome: string }) => p.nome);
+      expect(nomes.slice(0, 2)).toEqual(['Mauro', 'Rita']);
+      expect(nomes).toEqual(expect.arrayContaining(['Marcos', 'Milton']));
+      expect(equipe[1]).toMatchObject({ online: false, emTurno: true });
+      expect(equipe.every((p: { atendendo: number }) => typeof p.atendendo === 'number')).toBe(true);
+    } finally {
+      sock.disconnect();
+    }
+    const depois = await A.esperar(async () => {
+      const r = await req('GET', `/pessoas?unidadeId=${h.unidadeId}&busca=mauro`, undefined, tokMarcos);
+      return r.corpo[0]?.online === false ? r.corpo[0] : null;
+    });
+    expect(depois.nome).toBe('Mauro');
   });
 });
