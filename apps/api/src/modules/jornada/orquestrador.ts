@@ -447,7 +447,7 @@ export class Orquestrador {
           return;
         }
 
-        if (novo && rot && (await this.assuntoNovo(c, s, a, rot, decisaoId))) return;
+        if (novo && rot && (await this.assuntoNovo(c, s, a, rot, decisaoId, p.mensagemId))) return;
 
         switch (s.estado) {
           case 'automacao':
@@ -663,7 +663,14 @@ export class Orquestrador {
    * atende: o paralelo só passa a receber as mensagens do hóspede quando este terminar.
    * Devolve false quando não há o que fazer além do normal (avisar quem atende).
    */
-  private async assuntoNovo(c: Ctx, s: SolicitacaoRow, a: Analise, rot: ResultadoRoteamento, decisaoId: string | null): Promise<boolean> {
+  private async assuntoNovo(
+    c: Ctx,
+    s: SolicitacaoRow,
+    a: Analise,
+    rot: ResultadoRoteamento,
+    decisaoId: string | null,
+    mensagemId: string,
+  ): Promise<boolean> {
     const cfg = await this.acoes.config(c, s);
     const kb = a.conhecimento;
     if (kb?.responde && kb.resposta && kb.confianca >= cfg.limites.respostaAutomatica) {
@@ -703,10 +710,18 @@ export class Orquestrador {
     const nova = r.rows[0]!;
     await this.nucleo.evento(c, { solicitacaoId: nova.id, tipo: 'criada', atorTipo: 'solicitante', atorId: s.solicitante_id, dados: { paralelaDe: s.id } });
     const texto = this.textoPt(a);
-    // A mensagem do hóspede fica no atendimento de origem (o original é imutável); quem pega o
-    // paralelo lê o pedido aqui, em português.
-    await this.acoes.notaInterna(c, nova.id, `Pedido feito durante o atendimento de ${atual?.nome ?? 'outro setor'}: “${texto}”`, { tipo: 'sistema' });
-    await this.acoes.notaInterna(c, s.id, `O hóspede também pediu algo para ${setor.nome}. Foi aberto um atendimento separado para lá.`, { tipo: 'sistema' });
+    // A mensagem vai junto para o paralelo (migração 0011: só entre atendimentos do mesmo hóspede):
+    // quem pega a manutenção vê a fala do hóspede, com a tradução, e não só uma nota; o atendimento
+    // de origem fica com uma nota dizendo o que foi pedido e para onde foi.
+    await c.tx.client.query('UPDATE mensagem SET solicitacao_id = $2 WHERE id = $1', [mensagemId, nova.id]);
+    await c.tx.client.query('UPDATE decisao_ia SET solicitacao_id = $2 WHERE mensagem_id = $1', [mensagemId, nova.id]);
+    await this.acoes.notaInterna(
+      c,
+      nova.id,
+      `Pedido feito pelo chat durante o atendimento de ${atual?.nome ?? 'outro setor'}${s.resumo ? ` (“${s.resumo}”)` : ''}.`,
+      { tipo: 'sistema' },
+    );
+    await this.acoes.notaInterna(c, s.id, `O hóspede também pediu “${texto}”. Foi para ${setor.nome}, num atendimento separado.`, { tipo: 'sistema' });
 
     const gate = aplicarGate(rot, cfg.limites);
     const st: EstadoFluxo = {

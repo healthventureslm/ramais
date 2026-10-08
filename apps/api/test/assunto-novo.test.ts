@@ -111,10 +111,12 @@ describe.skipIf(!temBanco)('assunto novo no meio do atendimento', () => {
     expect(['na_fila', 'oferecida']).toContain(paralela.estado);
     // O hóspede é avisado do encaminhamento; quem atende a manutenção, por nota interna.
     expect((await A.saidas(paralela.id)).some((m) => m.autor_tipo === 'sistema')).toBe(true);
+    // A fala do hóspede vai para o paralelo: a governança vê o pedido como mensagem do hóspede.
+    expect((await ondeFoi('Pode mandar duas toalhas também?')).solicitacao_id).toBe(paralela.id);
     const notas = await A.consulta<{ texto: string }>(`SELECT texto FROM mensagem WHERE solicitacao_id = $1 AND visibilidade = 'interna'`, [origemId]);
-    expect(notas.some((n) => n.texto.includes('Foi aberto um atendimento separado'))).toBe(true);
+    expect(notas.some((n) => n.texto.includes('toalhas') && n.texto.includes('atendimento separado'))).toBe(true);
     const notaParalela = await A.consulta<{ texto: string }>(`SELECT texto FROM mensagem WHERE solicitacao_id = $1 AND visibilidade = 'interna'`, [paralela.id]);
-    expect(notaParalela.some((n) => n.texto.includes('toalhas'))).toBe(true);
+    expect(notaParalela.some((n) => n.texto.includes('durante o atendimento de'))).toBe(true);
     // A manutenção segue intacta.
     expect((await solicitacoes()).find((x) => x.id === origemId)).toMatchObject({ estado: 'em_atendimento', setor: 'manutencao' });
   });
@@ -131,6 +133,16 @@ describe.skipIf(!temBanco)('assunto novo no meio do atendimento', () => {
     await A.hospede(TEL, 'Vocês têm cardápio?');
     expect((await ondeFoi('Vocês têm cardápio?')).solicitacao_id).toBe(origemId);
     expect(await solicitacoes()).toHaveLength(antes);
+  });
+
+  it('o banco só deixa a mensagem mudar para outro atendimento do mesmo hóspede', async () => {
+    await A.hospede('5521977770010', 'O chuveiro não esquenta');
+    const outro = await A.esperar(() => A.solicitacaoDe('5521977770010'));
+    const m = await ondeFoi('A lâmpada ainda está piscando');
+    await expect(A.consulta('UPDATE mensagem SET solicitacao_id = $2 WHERE id = (SELECT id FROM mensagem WHERE texto = $1)', ['A lâmpada ainda está piscando', outro.id])).rejects.toThrow(
+      /mesmo solicitante/,
+    );
+    expect((await ondeFoi('A lâmpada ainda está piscando')).solicitacao_id).toBe(m.solicitacao_id);
   });
 
   it('terminada a manutenção, o paralelo passa a receber a conversa', async () => {
