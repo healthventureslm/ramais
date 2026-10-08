@@ -215,6 +215,7 @@ simultâneas de alguém sem solicitação aberta não criam duas solicitações.
 - **Estado:** fica todo na linha da `solicitacao`, sem nada em memória. Qualquer worker processa qualquer job.
 - **Temporizadores:** são jobs atrasados no pg-boss. Cada job carrega a `versao` esperada da solicitação; se ela mudou quando o job dispara, o job não faz nada. Uma varredura por minuto serve de rede de segurança.
 - **Gatilhos globais:** passam por um interceptador único, que combina palavras-chave exatas com as perguntas globais na mesma chamada de decisão. A precedência é emergência > encerrar > humano > setor errado > demora. A emergência tem limite baixo de propósito.
+- **Assunto novo no meio de um atendimento:** com atendimento em andamento, o roteador também responde se a mensagem é um assunto novo, separado do pedido atual (`assunto_novo`, só com confiança ≥ limite de gatilho). A base de conhecimento responde na hora, sem avisar quem atende ("qual a senha do Wi-Fi?"). Um pedido de outro setor ("mande toalhas também") abre um atendimento paralelo (`contexto.paralelaDe`), já encaminhado pelo gate de sempre, com nota interna nos dois. A conversa continua com o atendimento de origem: o paralelo só passa a receber as mensagens do hóspede quando a origem termina. Assunto novo prevalece sobre "setor errado", que fica para quando o hóspede diz que o setor do pedido está errado (aí o mesmo atendimento é transferido).
 - **Versionamento:** a solicitação fica na `jornada_versao` em que começou. O catálogo e a distribuição usam sempre a versão vigente.
 
 ---
@@ -224,7 +225,7 @@ simultâneas de alguém sem solicitação aberta não criam duas solicitações.
 ### Roteamento
 
 - **Entrada:** a mensagem pivotada para inglês, os dois últimos turnos e fatos vindos do código (unidade, local, horário).
-- **Saída:** JSON estruturado com `setor` (id permitido | `vago` | `nenhum`), `urgencia`, `emergencia`, `pede_humano`, `quer_encerrar`, `setor_errado`, `reclama_demora`, `insatisfeito` e `idioma`.
+- **Saída:** JSON estruturado com `setor` (id permitido | `vago` | `nenhum`), `urgencia`, `emergencia`, `pede_humano`, `quer_encerrar`, `setor_errado`, `reclama_demora`, `insatisfeito`, `assunto_novo` (só com atendimento em andamento) e `idioma`.
 - **Opções:** são filtradas por permissão em código antes da chamada.
 
 ### Confiança, em ordem de preferência

@@ -12,6 +12,11 @@ export const SaidaRoteamento = z.object({
   setor_errado: z.boolean(),
   reclama_demora: z.boolean(),
   insatisfeito: z.boolean(),
+  /**
+   * No meio de um atendimento: a mensagem é um assunto novo, separado do pedido em andamento
+   * ("qual a senha do Wi-Fi?", "mande toalhas também"). Sem atendimento em andamento, sempre false.
+   */
+  assunto_novo: z.boolean(),
   idioma: z.string(),
 });
 export type SaidaRoteamento = z.infer<typeof SaidaRoteamento>;
@@ -26,6 +31,7 @@ export interface ResultadoRoteamento {
     setor: number;
     urgencia: number;
     idioma: number;
+    assunto_novo: number;
   } & Record<Gatilho | 'insatisfeito', number>;
   /** Distribuição sobre setores, quando o motor fornece. */
   probsSetor?: Record<string, number>;

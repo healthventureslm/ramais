@@ -133,9 +133,13 @@ export class Orquestrador {
         const solicitanteId = sol.rows[0]!.id;
 
         const { id: versaoAtual, cfg } = await this.unidades.versaoAtual(c.tx, e.unidadeId);
+        // A conversa segue com o atendimento em andamento: um paralelo (pedido de outro setor feito no
+        // meio dele, contexto.paralelaDe) só passa a receber as mensagens quando a origem terminar.
         const ultima = await c.tx.client.query<SolicitacaoRow>(
-          `SELECT * FROM solicitacao WHERE solicitante_id = $1 AND unidade_id = $2 AND origem = 'externa'
-            ORDER BY criado_em DESC LIMIT 1 FOR UPDATE`,
+          `SELECT * FROM solicitacao s WHERE s.solicitante_id = $1 AND s.unidade_id = $2 AND s.origem = 'externa'
+              AND NOT EXISTS (SELECT 1 FROM solicitacao o WHERE o.id::text = s.contexto->>'paralelaDe'
+                                AND o.estado NOT IN ('resolvida', 'encerrada', 'cancelada'))
+            ORDER BY s.criado_em DESC LIMIT 1 FOR UPDATE OF s`,
           [solicitanteId, e.unidadeId],
         );
         // Chat do quarto: a conversa de um hóspede anterior nunca continua com o atual.
@@ -307,7 +311,8 @@ export class Orquestrador {
     const textoEn = a.traducaoEn?.texto
       ? [a.traducaoEn.texto, a.descricao ? `[photo: ${a.descricao.texto}]` : ''].filter(Boolean).join(' ')
       : null;
-    const [rot, kb] = await Promise.all([
+    const automacao = contexto.estado === 'automacao' || contexto.estado === 'resolvida';
+    const [rot, kbAutomacao] = await Promise.all([
       tentar('roteamento', () =>
         roteador.rotear({
           texto: textoParaRotear,
@@ -321,11 +326,17 @@ export class Orquestrador {
           setorAtual: p.setorAtualChave,
         }),
       ),
-      // A base de conhecimento só responde quem ainda está na automação.
-      contexto.estado === 'automacao' || contexto.estado === 'resolvida'
+      // Na automação a base tenta toda mensagem, junto com o roteamento.
+      automacao
         ? tentar('conhecimento', () => this.ia.respondedor.responder(a.textoBase || textoParaRotear, contexto.conhecimento))
         : Promise.resolve(null),
     ]);
+    // No meio de um atendimento, só quando o roteador vê um assunto novo ("qual a senha do Wi-Fi?"
+    // enquanto a manutenção cuida da pia): "ok", "obrigado" e o próprio assunto não gastam a base.
+    const assuntoNovo = !automacao && rot?.saida.assunto_novo && rot.confianca.assunto_novo >= contexto.cfg.limites.gatilho;
+    const kb = assuntoNovo
+      ? await tentar('conhecimento', () => this.ia.respondedor.responder(a.textoBase || textoParaRotear, contexto.conhecimento))
+      : kbAutomacao;
     a.roteamento = rot;
     a.conhecimento = kb;
     if (rot && rot.saida.idioma !== 'outro' && !a.idiomaOrigem) {
@@ -418,13 +429,25 @@ export class Orquestrador {
 
         const rot = a.roteamento;
         const porPalavra = gatilhoPorPalavra(a.textoBase, cfg.palavrasChave);
-        const gatilho = gatilhoVencedor(porPalavra, rot, cfg.limites);
+        // Assunto novo no meio de um atendimento (ver `assuntoNovo`).
+        const novo =
+          s.estado !== 'automacao' &&
+          s.estado !== 'resolvida' &&
+          Boolean(s.setor_id) &&
+          Boolean(rot?.saida.assunto_novo) &&
+          (rot?.confianca.assunto_novo ?? 0) >= cfg.limites.gatilho;
+        let gatilho = gatilhoVencedor(porPalavra, rot, cfg.limites);
+        // Pergunta ou pedido de outro assunto não é "setor errado": transferir tiraria do setor certo
+        // o pedido que já está sendo atendido.
+        if (gatilho === 'setor_errado' && novo) gatilho = null;
         const decisaoId = rot ? await this.gravarDecisao(c, s, p.mensagemId, rot, gatilho) : null;
 
         if (gatilho) {
           await this.tratarGatilho(c, s, gatilho, rot, cfg.setorFallback, a);
           return;
         }
+
+        if (novo && rot && (await this.assuntoNovo(c, s, a, rot, decisaoId))) return;
 
         switch (s.estado) {
           case 'automacao':
@@ -631,6 +654,84 @@ export class Orquestrador {
     if (s.setor_id) {
       await this.acoes.colocarNaFila(c, s, s.setor_id, { ator: { tipo: 'solicitante', id: s.solicitante_id }, motivo: 'nova mensagem' });
     }
+  }
+
+  /**
+   * Assunto novo no meio de um atendimento (o roteador viu, com confiança, que não é sobre o pedido
+   * em andamento). A base responde na hora, sem incomodar quem atende; ou, se é pedido de outro
+   * setor, abre um atendimento à parte já encaminhado para lá. A conversa continua com quem já
+   * atende: o paralelo só passa a receber as mensagens do hóspede quando este terminar.
+   * Devolve false quando não há o que fazer além do normal (avisar quem atende).
+   */
+  private async assuntoNovo(c: Ctx, s: SolicitacaoRow, a: Analise, rot: ResultadoRoteamento, decisaoId: string | null): Promise<boolean> {
+    const cfg = await this.acoes.config(c, s);
+    const kb = a.conhecimento;
+    if (kb?.responde && kb.resposta && kb.confianca >= cfg.limites.respostaAutomatica) {
+      await this.acoes.enviarAoSolicitante(c, s, { texto: kb.resposta, idioma: 'pt', autor: { tipo: 'ia' } });
+      await this.nucleo.evento(c, {
+        solicitacaoId: s.id,
+        tipo: 'resposta_automatica',
+        atorTipo: 'ia',
+        dados: { fontes: kb.fontes, confianca: kb.confianca, assuntoNovo: true },
+      });
+      return true;
+    }
+
+    const chave = rot.saida.setor;
+    if (chave === 'vago' || chave === 'nenhum') return false;
+    const setor = await this.unidades.setorPorChave(c.tx, s.unidade_id, chave);
+    if (!setor || setor.id === s.setor_id) return false;
+    const atual = s.setor_id ? await this.unidades.setorPorId(c.tx, s.setor_id) : null;
+
+    const r = await c.tx.client.query<SolicitacaoRow>(
+      `INSERT INTO solicitacao (org_id, unidade_id, solicitante_id, canal_id, origem, estado, etapa, jornada_versao_id,
+                                local_id, identificado, idioma, contexto, ultima_msg_solicitante_em, teste)
+       VALUES ($1, $2, $3, $4, 'externa', 'automacao', 'entrada', $5, $6, $7, $8, $9, now(), $10) RETURNING *`,
+      [
+        s.org_id,
+        s.unidade_id,
+        s.solicitante_id,
+        s.canal_id,
+        s.jornada_versao_id,
+        s.local_id,
+        s.identificado,
+        s.idioma,
+        JSON.stringify({ idiomaDefinido: true, paralelaDe: s.id }),
+        s.teste,
+      ],
+    );
+    const nova = r.rows[0]!;
+    await this.nucleo.evento(c, { solicitacaoId: nova.id, tipo: 'criada', atorTipo: 'solicitante', atorId: s.solicitante_id, dados: { paralelaDe: s.id } });
+    const texto = this.textoPt(a);
+    // A mensagem do hóspede fica no atendimento de origem (o original é imutável); quem pega o
+    // paralelo lê o pedido aqui, em português.
+    await this.acoes.notaInterna(c, nova.id, `Pedido feito durante o atendimento de ${atual?.nome ?? 'outro setor'}: “${texto}”`, { tipo: 'sistema' });
+    await this.acoes.notaInterna(c, s.id, `O hóspede também pediu algo para ${setor.nome}. Foi aberto um atendimento separado para lá.`, { tipo: 'sistema' });
+
+    const gate = aplicarGate(rot, cfg.limites);
+    const st: EstadoFluxo = {
+      etapa: 3,
+      bloco: 0,
+      aguardando: null,
+      dados: {},
+      pedido: null,
+      // Quem decide o destino é o gate de sempre (certeza e modo sombra do setor); "perguntar" não
+      // cabe aqui, o hóspede já disse o que quer.
+      decisao: {
+        texto,
+        setor: gate.setor ?? chave,
+        acao: gate.acao === 'perguntar' ? 'encaminhar_baixa_certeza' : gate.acao,
+        confianca: rot.confianca.setor,
+        urgencia: rot.saida.urgencia,
+        decisaoId,
+      },
+      perguntouDetalhe: false,
+      encaminhou: false,
+      concluido: true,
+    };
+    await this.acoes.atualizar(c, nova, { resumo: texto, contexto: { ...nova.contexto, fluxo: st } });
+    await this.motor.encaminharDecidido(c, await this.acoes.carregar(c, nova.id), st, cfg, true, rot.saida.urgencia);
+    return true;
   }
 
   private paraFluxo(a: Analise): AnaliseFluxo {

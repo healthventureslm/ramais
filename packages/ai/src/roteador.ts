@@ -32,7 +32,11 @@ const PERGUNTAS_BOOL: Record<(typeof GATILHOS)[number] | 'insatisfeito', string>
   emergencia: 'Is this an emergency with risk to health, life or safety (fire, medical, violence)?',
   pede_humano: 'Does the person explicitly ask to talk to a human/staff member?',
   quer_encerrar: 'Does the person want to end the conversation or say they no longer need anything?',
-  setor_errado: 'Does the person say they were sent to the wrong department or the reply is about something else?',
+  // Antes dizia "...or the reply is about something else": no meio de um atendimento da manutenção,
+  // "qual a senha do Wi-Fi?" virava "setor errado" e o pedido da pia era transferido para a recepção.
+  setor_errado:
+    'Does the person say that their request was sent to the wrong department, i.e. the department handling it is not the right one for it? ' +
+    'Asking a new, unrelated question or making a different request is NOT this.',
   reclama_demora: 'Does the person complain about waiting or that nobody has come yet?',
   insatisfeito: 'Is the person clearly dissatisfied or angry?',
 };
@@ -89,6 +93,23 @@ export function montarPerguntas(e: EntradaRoteamento): Pergunta[] {
       tipo: 'sim_nao' as const,
       descricoes: { sim: texto.replace(/^(Is|Does) /, 'Yes: '), nao: 'No.' },
     })),
+    // Só com atendimento em andamento: o assunto é o mesmo do pedido atual ou é outro?
+    ...(e.setorAtual
+      ? [
+          {
+            id: 'assunto_novo',
+            texto:
+              `A request is already being handled by the ${e.setorAtual} department. Is this message a NEW, separate question or request, ` +
+              'unrelated to that request? A follow-up, an answer to staff, thanks, a complaint or more details about the current request are NOT new. (nao = no, sim = yes)',
+            opcoes: BOOL,
+            tipo: 'sim_nao' as const,
+            descricoes: {
+              sim: 'Yes: a different subject (another need, or a general question about the hotel).',
+              nao: 'No: it is about the request already being handled.',
+            },
+          },
+        ]
+      : []),
     {
       id: 'idioma',
       texto: 'Which language is the original message written in?',
@@ -125,6 +146,7 @@ export class Roteador {
       setor_errado: bool('setor_errado'),
       reclama_demora: bool('reclama_demora'),
       insatisfeito: bool('insatisfeito'),
+      assunto_novo: Boolean(e.setorAtual) && bool('assunto_novo'),
       idioma: val('idioma') ?? 'pt',
     };
     const metodo = r.motor.startsWith('regras')
@@ -146,6 +168,7 @@ export class Roteador {
         setor_errado: confSim('setor_errado'),
         reclama_demora: confSim('reclama_demora'),
         insatisfeito: confSim('insatisfeito'),
+        assunto_novo: e.setorAtual ? confSim('assunto_novo') : 0,
       },
       probsSetor: por.get('setor')?.probs,
       motor: r.motor,
