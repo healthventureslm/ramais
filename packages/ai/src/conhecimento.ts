@@ -35,6 +35,10 @@ export class RespondedorLLM implements Respondedor {
     const sistema = [
       'You answer guest questions using ONLY the knowledge base below.',
       'If the message is a request for something to be done (bring, fix, book, send, change), it is NOT a question: answer=false.',
+      // "Preciso da nota em nome da XPTO, CNPJ ..." recebia "A nota será emitida em nome da XPTO":
+      // a IA prometia o que não faz e o pedido nunca chegava à recepção.
+      'If the person gives details for staff to act on (a time, a name, a document or company number, a room) or reports a problem, it is a request: answer=false.',
+      'Never promise that something will be done; only inform what the knowledge base says.',
       'If the knowledge base does not fully answer the question, answer=false. Never guess.',
       'When answering, write a short reply in Brazilian Portuguese and list the ids you used.',
       'Reply with JSON {"answer": boolean, "reply": string, "sources": string[]}.',

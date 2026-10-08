@@ -29,9 +29,25 @@ const pool = criarPool(url, 2);
 const aleatorio = (n: number) => new Uint8Array(randomBytes(n));
 
 // Como dono, sem tenant, a RLS esconde tudo: a checagem usa a função de sistema do login.
-const ja = await pool.query('SELECT * FROM sistema.resolver_login($1)', [email('admin')]);
+const ja = await pool.query<{ org_id: string }>('SELECT * FROM sistema.resolver_login($1)', [email('admin')]);
 if (ja.rows.length) {
-  console.log(`demo já existe (${DEMO.unidade}, login ${email('admin')}). Nada alterado.`);
+  // Hotel já criado: só acrescenta à base as entradas novas deste arquivo. O que já existe (mesmo
+  // editado ou desativado na tela de administração) fica como está.
+  const novas = await comTenant(pool, ja.rows[0]!.org_id, async ({ client }) => {
+    const u = await client.query<{ id: string }>('SELECT id FROM unidade WHERE nome = $1', [DEMO.unidade]);
+    if (!u.rows[0]) return 0;
+    let n = 0;
+    for (const k of DEMO_CONHECIMENTO) {
+      const r = await client.query(
+        `INSERT INTO base_conhecimento (org_id, unidade_id, chave, pergunta, resposta, tags) VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (unidade_id, chave) DO NOTHING`,
+        [ja.rows[0]!.org_id, u.rows[0].id, k.chave, k.pergunta, k.resposta, k.tags],
+      );
+      n += r.rowCount ?? 0;
+    }
+    return n;
+  });
+  console.log(`demo já existe (${DEMO.unidade}, login ${email('admin')}). Base de conhecimento: ${novas} entrada(s) nova(s).`);
   await pool.end();
   process.exit(0);
 }
