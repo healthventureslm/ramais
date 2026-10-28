@@ -66,7 +66,8 @@ export class LocaisController {
         unidadeId,
       ]);
       const numero = canal.rows[0]?.numero_exibicao as string | undefined;
-      const destino = (await c.tx.client.query('SELECT qr_destino FROM unidade WHERE id = $1', [unidadeId])).rows[0]?.qr_destino as 'whatsapp' | 'web';
+      const u = (await c.tx.client.query('SELECT qr_destino, codigo_publico FROM unidade WHERE id = $1', [unidadeId])).rows[0];
+      const destino = u?.qr_destino as 'whatsapp' | 'web';
       const r = await c.tx.client.query(
         `SELECT l.id, l.identificador, l.tipo, l.ativo, l.codigo_qr,
                 (SELECT h.sobrenome FROM hospede_ativo h WHERE h.local_id = l.id AND current_date BETWEEN h.checkin AND h.checkout LIMIT 1) AS hospede
@@ -77,6 +78,8 @@ export class LocaisController {
       return {
         numeroWhatsapp: numero ?? null,
         destino,
+        // Chat do hotel: QR na recepção, no site ou no Instagram, para quem ainda vai se hospedar.
+        linkHotel: u?.codigo_publico ? `${urlWeb}/h/${u.codigo_publico}` : null,
         quartos: r.rows.map((l) => ({
           id: l.id,
           identificador: l.identificador,

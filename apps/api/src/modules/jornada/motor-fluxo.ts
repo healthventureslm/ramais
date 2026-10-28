@@ -54,6 +54,12 @@ type Passo = { r: 'seguir' } | { r: 'aguardar' } | { r: 'fim' };
  * Resposta a "bom dia", "oi", "preciso de ajuda" no chat do quarto. Fora de PT/ES/EN, sai em inglês
  * e a saída traduz para o idioma do hóspede.
  */
+/** No chat do hotel (quem ainda não está hospedado), a saudação diz o que dá para fazer ali. */
+const SAUDACAO_HOTEL = {
+  pt: 'Olá! Aqui você tira dúvidas sobre o hotel e faz a sua reserva. Me diga as datas e quantas pessoas, ou pergunte o que quiser. Se preferir falar com a nossa equipe, é só pedir.',
+  es: '¡Hola! Aquí puede resolver sus dudas sobre el hotel y hacer su reserva. Dígame las fechas y cuántas personas, o pregunte lo que quiera. Si prefiere hablar con nuestro equipo, solo pídalo.',
+  en: 'Hi! Here you can ask anything about the hotel and book your stay. Tell me the dates and how many people, or ask what you like. If you would rather talk to our team, just ask.',
+};
 const SAUDACAO_CHAT = {
   pt: 'Olá! Escreva aqui o que você precisa, do seu jeito, que a gente encaminha para o setor certo. Se preferir ir direto a um setor, toque em "Menu principal", no alto do chat, e escolha.',
   es: '¡Hola! Escriba aquí lo que necesita, como prefiera, y lo enviamos al sector indicado. Si prefiere ir directo a un sector, toque "Menú principal", arriba del chat, y elija.',
@@ -170,7 +176,8 @@ export class MotorFluxo {
           setor,
           setorExigeIdentificacao: cfg.setores.find((x) => x.chave === setor)?.exigeIdentificacao ?? false,
           idioma: s.idioma,
-          identificado: s.identificado,
+          // Visitante do chat do hotel não tem quarto para confirmar: a identificação não se aplica.
+          identificado: s.identificado || (s.contexto as { visitante?: boolean }).visitante === true,
           temQuarto: s.local_id !== null,
           dados: st.dados,
           urgencia: st.pedido?.urgencia ?? 'rotina',
@@ -256,7 +263,8 @@ export class MotorFluxo {
             st.perguntouDetalhe = true;
             st.aguardando = { blocoId: b.id, motivo: 'detalhe', tentativas: 0 };
             // Chat do quarto tem o Menu principal no alto: a saudação ensina os dois caminhos.
-            if (await this.chatDoQuarto(c, s)) await this.acoes.enviarConteudo(c, s, { tipo: 'livre', texto: SAUDACAO_CHAT });
+            if ((s.contexto as { visitante?: boolean }).visitante) await this.acoes.enviarConteudo(c, s, { tipo: 'livre', texto: SAUDACAO_HOTEL });
+            else if (await this.chatDoQuarto(c, s)) await this.acoes.enviarConteudo(c, s, { tipo: 'livre', texto: SAUDACAO_CHAT });
             else await this.acoes.enviarTextoFixo(c, s, 'pedir_detalhe');
             return { r: 'aguardar' };
           }

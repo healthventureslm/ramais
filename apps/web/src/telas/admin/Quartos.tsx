@@ -14,7 +14,7 @@ import {
   useConfirm,
   useViewport,
 } from '@healthventureslm/design-system';
-import { ExternalLink, Plus, Printer, QrCode, RefreshCw, Search } from 'lucide-react';
+import { Copy, ExternalLink, Plus, Printer, QrCode, RefreshCw, Search } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -34,7 +34,8 @@ export function Quartos({ unidadeId, unidadeNome }: { unidadeId: string; unidade
   const [filtro, setFiltro] = useState('');
   const [verQr, setVerQr] = useState<{ quarto: Quarto; img: string } | null>(null);
   const [renomeando, setRenomeando] = useState<{ quarto: Quarto; valor: string } | null>(null);
-  const [folha, setFolha] = useState<{ identificador: string; img: string }[] | null>(null);
+  const [folha, setFolha] = useState<{ identificador: string; img: string; hotel?: boolean }[] | null>(null);
+  const [qrHotel, setQrHotel] = useState<string | null>(null);
   const [confirmar, confirmacao] = useConfirm();
   const { isMobile } = useViewport();
 
@@ -43,6 +44,20 @@ export function Quartos({ unidadeId, unidadeNome }: { unidadeId: string; unidade
     void carregar();
     setSel(new Set());
   }, [unidadeId]);
+
+  const linkHotel = dados?.linkHotel ?? null;
+  useEffect(() => {
+    if (!linkHotel) return setQrHotel(null);
+    void QRCode.toDataURL(linkHotel, { margin: 1, width: 360 }).then(setQrHotel);
+  }, [linkHotel]);
+  async function copiarLinkHotel() {
+    try {
+      await navigator.clipboard.writeText(linkHotel!);
+      avisar('Link do chat do hotel copiado.', 'success');
+    } catch {
+      avisar('Não deu para copiar: selecione o link e copie.', 'warning');
+    }
+  }
 
   const quartos = dados?.quartos ?? [];
   const f = filtro.trim().toLowerCase();
@@ -195,6 +210,38 @@ export function Quartos({ unidadeId, unidadeNome }: { unidadeId: string; unidade
               },
             ]}
           />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Chat do hotel"
+          subtitle="Para quem ainda vai se hospedar: tira dúvidas e faz a reserva com a IA, sem quarto. Use o QR na recepção e o link no site, no Instagram ou no Google."
+        />
+        <CardBody>
+          {linkHotel && qrHotel ? (
+            <div className="linha admin-qr-hotel">
+              <img src={qrHotel} alt="QR do chat do hotel" width={160} height={160} />
+              <div className="pilha">
+                <a className="dado pequeno" href={linkHotel} target="_blank" rel="noreferrer">
+                  {linkHotel}
+                </a>
+                <div className="linha">
+                  <Button size="sm" variant="secondary" iconLeft={<Copy />} onClick={() => void copiarLinkHotel()}>
+                    Copiar link
+                  </Button>
+                  <Button size="sm" variant="ghost" iconLeft={<ExternalLink />} onClick={() => window.open(linkHotel, '_blank', 'noopener')}>
+                    Abrir o chat
+                  </Button>
+                  <Button size="sm" variant="ghost" iconLeft={<Printer />} onClick={() => setFolha([{ identificador: unidadeNome, img: qrHotel, hotel: true }])}>
+                    Imprimir QR
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <span className="mudo">Carregando…</span>
+          )}
         </CardBody>
       </Card>
 
@@ -357,11 +404,11 @@ export function Quartos({ unidadeId, unidadeNome }: { unidadeId: string; unidade
             {folha.map((c) => (
               <div key={c.identificador} className="cartao-qr">
                 <div className="cartao-qr-hotel">{unidadeNome}</div>
-                <div className="cartao-qr-chamada">Precisa de algo? Fale com a gente</div>
-                <div className="cartao-qr-idiomas">¿Necesita algo? · Need anything?</div>
+                <div className="cartao-qr-chamada">{c.hotel ? 'Reserve ou tire suas dúvidas' : 'Precisa de algo? Fale com a gente'}</div>
+                <div className="cartao-qr-idiomas">{c.hotel ? 'Reserve o pregunte · Book or ask' : '¿Necesita algo? · Need anything?'}</div>
                 <img src={c.img} alt="" />
-                <div className="cartao-qr-dica">{dados?.destino === 'web' ? 'Aponte a câmera · chat do hotel' : 'Aponte a câmera · WhatsApp'}</div>
-                <div className="cartao-qr-quarto">{c.identificador}</div>
+                <div className="cartao-qr-dica">{c.hotel || dados?.destino === 'web' ? 'Aponte a câmera · chat do hotel' : 'Aponte a câmera · WhatsApp'}</div>
+                {!c.hotel && <div className="cartao-qr-quarto">{c.identificador}</div>}
               </div>
             ))}
           </div>,

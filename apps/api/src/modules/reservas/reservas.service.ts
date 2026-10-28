@@ -1,11 +1,12 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { ContextoReserva, ExtracaoReserva, ServicosIA } from '@ramais/ai';
 import { dataLocal, diaDaSemana } from '@ramais/domain';
 import type { Config } from '../../config.js';
 import { Nucleo, type Ctx } from '../../infra/nucleo.js';
 import { CONFIG, IA } from '../../infra/tokens.js';
 import { Unidades } from '../../infra/unidades.js';
-import { ClienteVoa, ErroVoa, type QuartoBusca, type TarifaVoa } from '../../infra/voa.js';
+import { ClienteVoa, ErroVoa, type CotacaoExtensao, type ConfirmacaoExtensao, type QuartoBusca, type TarifaVoa } from '../../infra/voa.js';
+import { Cobrancas, type CobrancaRow } from '../cobrancas/cobrancas.service.js';
 import { Acoes } from '../solicitacoes/acoes.js';
 import type { SolicitacaoRow } from '../solicitacoes/tipos.js';
 
@@ -42,6 +43,10 @@ export interface ReservaRow {
   expira_em: Date | null;
   booking_id: string | null;
   ultima_pergunta: string | null;
+  /** nova: hospedagem nova (link da VOA); extensao: mais noites para quem está no quarto. */
+  tipo: 'nova' | 'extensao';
+  extensao: { cotacao: CotacaoExtensao['data']; confirmacao?: ConfirmacaoExtensao['data'] } | null;
+  cobranca_id: string | null;
 }
 
 /** Aviso de pagamento da VOA (webhook). */
@@ -58,7 +63,7 @@ export interface EventoVoa {
   paid_at?: string | null;
 }
 
-const ATIVOS = ['coletando', 'opcoes', 'titular'];
+const ATIVOS = ['coletando', 'opcoes', 'titular', 'cotada'];
 const VAZIA: ExtracaoReserva = {
   querReservar: false,
   sobreReserva: false,
@@ -74,8 +79,12 @@ const VAZIA: ExtracaoReserva = {
   escolha: null,
   nome: null,
   email: null,
+  sim: false,
   modelo: 'nenhum',
 };
+const SIM = /^(sim|s|ok|okay|pode|pode sim|confirmo|confirma|confirmado|isso|claro|fechado|quero|bora|yes|yep|sure|s[ií]|vale|dale)\b[\s.!]*/i;
+/** Mais noites sem lista de hóspedes: o hotel não sabe o check-out de hoje e pergunta. */
+const PERGUNTA_CHECKOUT_HOJE = 'Claro! Qual é o dia do seu check-out hoje';
 const DIAS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MAX_OPCOES = 6;
 
@@ -120,7 +129,7 @@ function descreverOpcao(o: TarifaVoa): string {
  * A equipe acompanha pelas notas e só entra se o hóspede pedir uma pessoa ou se a VOA falhar.
  */
 @Injectable()
-export class Reservas {
+export class Reservas implements OnModuleInit {
   private readonly log = new Logger('reservas');
 
   constructor(
@@ -128,9 +137,14 @@ export class Reservas {
     private readonly acoes: Acoes,
     private readonly unidades: Unidades,
     private readonly voa: ClienteVoa,
+    private readonly cobrancas: Cobrancas,
     @Inject(IA) private readonly ia: ServicosIA,
     @Inject(CONFIG) private readonly cfg: Config,
   ) {}
+
+  onModuleInit() {
+    this.cobrancas.reagir('extensao', (c, cob, estado) => this.aoMudarCobranca(c, cob, estado));
+  }
 
   /** A integração vale para esta unidade? (token da VOA e o hotel cadastrado). */
   async hotelDaUnidade(c: Ctx, unidadeId: string): Promise<number | null> {
@@ -202,12 +216,21 @@ export class Reservas {
       if (!ex?.querReservar) return false;
       const hotel = await this.hotelDaUnidade(c, s.unidade_id);
       if (!hotel) return false;
+      // No quarto, "ficar mais" é estender a reserva que já existe (não abrir outra).
+      const tipo = ex.estender && s.local_id ? 'extensao' : 'nova';
       const ins = await c.tx.client.query<ReservaRow>(
-        `INSERT INTO reserva_hospedagem (org_id, unidade_id, solicitacao_id, voa_hotel_id) VALUES ($1, $2, $3, $4) RETURNING *`,
-        [c.tx.orgId, s.unidade_id, s.id, hotel],
+        `INSERT INTO reserva_hospedagem (org_id, unidade_id, solicitacao_id, voa_hotel_id, tipo) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [c.tx.orgId, s.unidade_id, s.id, hotel, tipo],
       );
       r = ins.rows[0]!;
-      await this.acoes.notaInterna(c, s.id, 'Reserva de hospedagem automática: a IA está atendendo (busca na VOA e link de pagamento).', { tipo: 'sistema' });
+      await this.acoes.notaInterna(
+        c,
+        s.id,
+        tipo === 'extensao'
+          ? 'Mais noites na estadia: a IA está atendendo (cotação na VOA e link de pagamento).'
+          : 'Reserva de hospedagem automática: a IA está atendendo (busca na VOA e link de pagamento).',
+        { tipo: 'sistema' },
+      );
       await this.nucleo.evento(c, { solicitacaoId: s.id, tipo: 'reserva_iniciada', atorTipo: 'ia', dados: { reserva: r.id } });
     } else if (!ex) {
       // A IA não leu a mensagem: repete a pergunta em vez de perder o fio.
@@ -255,6 +278,7 @@ export class Reservas {
     if (p.checkIn && p.checkOut && p.checkOut <= p.checkIn) p.checkOut = null;
     const mudouPedido = JSON.stringify(p) !== JSON.stringify(r.pedido);
     r = await this.mudar(c, r, { pedido: p });
+    if (r.tipo === 'extensao') return this.tratarExtensao(c, s, r, p, ex, mudouPedido);
 
     // Nome e e-mail do titular (o hóspede pode mandar junto com a escolha).
     if (ex?.nome) r = await this.mudar(c, r, { titular_nome: ex.nome });
@@ -391,7 +415,7 @@ export class Reservas {
         tarifaId: escolha.tarifaId,
         nome: r.titular_nome,
         email: r.titular_email,
-        telefone: tel && !tel.startsWith('quarto:') ? `+${tel.replace(/\D/g, '')}` : null,
+        telefone: tel && !/^(quarto|visitante):/.test(tel) ? `+${tel.replace(/\D/g, '')}` : null,
         expiraEm,
         criadoPor: 'Ramais (atendimento automático)',
       });
@@ -505,11 +529,223 @@ export class Reservas {
     }
   }
 
+  // ---------- Mais noites na estadia (extensão) ----------
+
+  /**
+   * O hóspede no quarto quer ficar mais: até quando → cotação (preço real das noites a mais) →
+   * "Confirma?" → link de pagamento → pago, a VOA confirma e a estadia no Ramais aumenta.
+   */
+  private async tratarExtensao(c: Ctx, s: SolicitacaoRow, r: ReservaRow, p: PedidoReserva, ex: ExtracaoReserva | null, mudou: boolean): Promise<boolean> {
+    // Com a lista de hóspedes, as noites a mais começam no check-out atual (não no que a IA supôs).
+    const h = s.local_id
+      ? await c.tx.client.query<{ checkout: string }>(
+          `SELECT checkout::text FROM hospede_ativo WHERE local_id = $1 AND current_date BETWEEN checkin AND checkout ORDER BY checkout DESC LIMIT 1`,
+          [s.local_id],
+        )
+      : null;
+    const atual = h?.rows[0]?.checkout;
+    if (atual && p.checkIn !== atual) {
+      p = { ...p, checkIn: atual, checkOut: ex?.checkOut ?? (p.noites ? somarDias(atual, p.noites) : p.checkOut) };
+      if (p.checkOut && p.checkOut <= atual) p.checkOut = null;
+      r = await this.mudar(c, r, { pedido: p });
+    } else if (!atual && r.ultima_pergunta?.startsWith(PERGUNTA_CHECKOUT_HOJE)) {
+      // Sem lista de hóspedes, perguntamos o check-out de hoje: uma data só na resposta é ele
+      // (mesmo que a IA a leia como saída). Com duas, valem como vieram.
+      const dita = ex?.checkIn && ex.checkOut ? null : (ex?.checkIn ?? ex?.checkOut ?? null);
+      if (dita) {
+        p = { ...p, checkIn: dita, checkOut: p.noites ? somarDias(dita, p.noites) : null };
+        r = await this.mudar(c, r, { pedido: p });
+      }
+    }
+    if (r.estado === 'cotada' && !mudou) {
+      if (ex?.sim) await this.fecharExtensao(c, s, r);
+      else if (r.ultima_pergunta) await this.falar(c, s, r.ultima_pergunta);
+      return true;
+    }
+    if (!p.checkIn) {
+      const quantas = p.noites ? ` Aí eu vejo as ${p.noites} ${p.noites === 1 ? 'noite' : 'noites'} a mais.` : ' E até quando você quer ficar?';
+      await this.perguntar(c, s, r, `${PERGUNTA_CHECKOUT_HOJE}?${quantas}`);
+      return true;
+    }
+    if (!p.checkOut) {
+      await this.perguntar(c, s, r, `O seu check-out hoje é em ${dm(p.checkIn)}. Até que dia você quer ficar?`);
+      return true;
+    }
+    if (noitesEntre(p.checkIn, p.checkOut) > 30) {
+      r = await this.mudar(c, r, { pedido: { ...p, checkOut: null, noites: null } });
+      await this.perguntar(c, s, r, 'Por aqui consigo estender até 30 noites. Até que dia você quer ficar?');
+      return true;
+    }
+    await this.cotarExtensao(c, s, r, p);
+    return true;
+  }
+
+  private async cotarExtensao(c: Ctx, s: SolicitacaoRow, r: ReservaRow, p: PedidoReserva) {
+    const quarto = await this.quartoDe(c, s);
+    let cot: CotacaoExtensao;
+    try {
+      cot = await this.voa.cotarExtensao({
+        hotelId: r.voa_hotel_id,
+        reserva: null,
+        quarto,
+        checkoutAtual: p.checkIn!,
+        novoCheckout: p.checkOut!,
+        // A rota de verdade usa a ocupação da reserva; na simulação, a que o hóspede disse (ou 2 adultos).
+        ocupacao: { adultos: p.adultos ?? 2, idadesCriancas: p.idadesCriancas ?? [] },
+      });
+    } catch (e) {
+      await this.falhou(c, s, r, e);
+      return;
+    }
+    const d = cot.data;
+    if (!d.available || !d.quote_id) {
+      r = await this.mudar(c, r, { estado: 'coletando', pedido: { ...p, checkOut: null, noites: null } });
+      await this.acoes.notaInterna(c, s.id, `Mais noites: sem disponibilidade de ${dm(p.checkIn!)} a ${dm(p.checkOut!)}${d.reason ? ` (${d.reason})` : ''}.`, { tipo: 'sistema' });
+      await this.perguntar(c, s, r, `Não consigo estender até ${dm(p.checkOut!)}${d.reason ? `: ${d.reason}` : ''}. Quer tentar outra data?`);
+      return;
+    }
+    const n = d.extension.nights;
+    r = await this.mudar(c, r, { estado: 'cotada', extensao: { cotacao: d }, total: d.total });
+    const comoPaga = this.cobrancas.disponivel ? 'Confirmando, mando o link para pagar por Pix ou cartão.' : 'O valor vai para a conta do quarto.';
+    await this.acoes.atualizar(c, s, { resumo: `Mais noites: até ${dm(d.extension.check_out)} (${n} ${n === 1 ? 'noite' : 'noites'}) · ${brl(d.total)}` });
+    await this.acoes.notaInterna(c, s.id, `Mais noites: cotação de ${dm(d.extension.check_in)} a ${dm(d.extension.check_out)}, ${d.room?.name ?? 'quarto'}, ${brl(d.total)} (simulada: a VOA ainda não tem a rota de extensão).`, { tipo: 'sistema' });
+    await this.perguntar(
+      c,
+      s,
+      r,
+      `Dá para ficar até ${dm(d.extension.check_out)}: ${n} ${n === 1 ? 'noite' : 'noites'} a mais${d.room ? ` (${d.room.name}, ${d.rate?.type_formated.toLowerCase() ?? ''})`.replace(', )', ')') : ''} por ${brl(d.total)}, com impostos.\n${comoPaga}\n\nConfirma?`,
+    );
+  }
+
+  private async fecharExtensao(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
+    const d = r.extensao!.cotacao;
+    // Cotação vencida: cota de novo (o preço pode ter mudado) e pergunta outra vez.
+    if (Date.parse(d.expires) < Date.now() + 60_000) {
+      await this.cotarExtensao(c, s, r, r.pedido);
+      return;
+    }
+    const n = d.extension.nights;
+    const quarto = await this.quartoDe(c, s);
+    const resumo = `${n} ${n === 1 ? 'noite' : 'noites'} a mais, de ${dm(d.extension.check_in)} a ${dm(d.extension.check_out)}${quarto ? `, quarto ${quarto}` : ''}`;
+    const valor = Math.round(d.total * 100);
+    if (!this.cobrancas.disponivel) {
+      await this.aplicarExtensao(c, s, r, { provedor: 'conta_quarto', id: null, valorCentavos: valor, pagoEm: null });
+      return;
+    }
+    let cob: CobrancaRow;
+    try {
+      cob = await this.cobrancas.criar(c, {
+        s,
+        tipo: 'extensao',
+        descricao: resumo,
+        itens: [
+          {
+            descricao: `Hospedagem${d.room ? ` (${d.room.name})` : ''}, ${n} ${n === 1 ? 'noite' : 'noites'}: ${dm(d.extension.check_in)} a ${dm(d.extension.check_out)}`,
+            quantidade: 1,
+            totalCentavos: valor,
+          },
+        ],
+        cliente: { nome: await this.nomeConhecido(c, s) },
+        reserva: { checkIn: d.extension.check_in, checkOut: d.extension.check_out, codigo: d.booking_id, hospede: await this.nomeConhecido(c, s) },
+      });
+    } catch (e) {
+      await this.falhou(c, s, r, e, 'Tive um problema para gerar o link de pagamento agora. Vou passar o seu pedido para a recepção, que te responde por aqui.');
+      return;
+    }
+    r = await this.mudar(c, r, { estado: 'aguardando_pagamento', cobranca_id: cob.id, link: cob.link, expira_em: cob.expira_em, ultima_pergunta: null });
+    await this.falar(c, s, `Perfeito! ${resumo[0]!.toUpperCase()}${resumo.slice(1)}. Total: ${brl(d.total)}.\n${await this.cobrancas.textoDoLink(c, cob)}\nAssim que o pagamento cair, confirmo as noites com o hotel e aviso aqui.`);
+    await this.acoes.notaInterna(c, s.id, `Mais noites: link de pagamento enviado. ${resumo} · ${brl(d.total)}.`, { tipo: 'sistema' });
+    await this.concluir(c, s, `Mais noites: ${resumo} · ${brl(d.total)} · aguardando pagamento`);
+  }
+
+  /** O link das noites a mais mudou: pago confirma na VOA; vencido avisa. */
+  private async aoMudarCobranca(c: Ctx, cob: CobrancaRow, estado: string): Promise<boolean> {
+    const q = await c.tx.client.query<ReservaRow>('SELECT * FROM reserva_hospedagem WHERE cobranca_id = $1 FOR UPDATE', [cob.id]);
+    const r = q.rows[0];
+    if (!r) return false;
+    const s = await this.acoes.carregar(c, r.solicitacao_id, false);
+    if (estado === 'paga') {
+      await this.aplicarExtensao(c, s, r, { provedor: 'salabim_pay', id: cob.link_id, valorCentavos: cob.valor_centavos, pagoEm: new Date().toISOString() });
+      return true;
+    }
+    if (estado === 'expirada' || estado === 'cancelada') {
+      await this.mudar(c, r, { estado: 'expirada' });
+      await this.falar(c, s, 'O link de pagamento venceu e as noites a mais não foram reservadas. Se ainda quiser ficar, é só me dizer.');
+      return true;
+    }
+    if (estado === 'estornada') await this.mudar(c, r, { estado: 'estornada' });
+    return false;
+  }
+
+  /** Pago (ou na conta do quarto): a VOA confirma e a estadia no Ramais vai até o novo check-out. */
+  private async aplicarExtensao(c: Ctx, s: SolicitacaoRow, r: ReservaRow, pagamento: Parameters<ClienteVoa['confirmarExtensao']>[0]['pagamento']) {
+    const d = r.extensao!.cotacao;
+    let conf: ConfirmacaoExtensao;
+    try {
+      conf = await this.voa.confirmarExtensao({ hotelId: r.voa_hotel_id, cotacao: d, pagamento });
+    } catch (e) {
+      this.log.warn(`VOA não confirmou a extensão (reserva ${r.id}): ${(e as Error).message}`);
+      await this.mudar(c, r, { estado: 'erro' });
+      await this.acoes.notaInterna(c, s.id, `ATENÇÃO: pagamento recebido, mas a VOA não confirmou as noites a mais (${(e as Error).message.slice(0, 160)}). Confirme com o hotel.`, { tipo: 'sistema' });
+      await this.falar(c, s, 'Pagamento recebido! A recepção vai confirmar as noites a mais com você em instantes.');
+      await this.avisarRecepcao(c, s, 'Extensão paga sem confirmação da VOA', `Até ${dm(d.extension.check_out)} · ${brl(pagamento.valorCentavos / 100)}`);
+      return;
+    }
+    const novo = conf.data.check_out;
+    await this.mudar(c, r, {
+      estado: 'paga',
+      booking_id: conf.data.booking_id,
+      extensao: { ...r.extensao, confirmacao: conf.data },
+      status_pagamento: pagamento.provedor === 'salabim_pay' ? 'PAID' : 'ROOM_BILL',
+      status_reserva: conf.data.status,
+      pago_em: pagamento.pagoEm ? new Date(pagamento.pagoEm) : null,
+    });
+    // A estadia no Ramais acompanha: lista de hóspedes, sessão do chat do quarto e vínculo do WhatsApp.
+    if (s.local_id) {
+      await c.tx.client.query(
+        `UPDATE hospede_ativo SET checkout = $3::date WHERE local_id = $1 AND checkout = $2::date AND checkout < $3::date`,
+        [s.local_id, d.extension.check_in, novo],
+      );
+      await c.tx.client.query(
+        `UPDATE chat_sessao cs SET expira_em = greatest(cs.expira_em, ($2::date + time '12:00') AT TIME ZONE u.fuso)
+           FROM unidade u WHERE u.id = cs.unidade_id AND cs.local_id = $1 AND cs.expira_em > now()`,
+        [s.local_id, novo],
+      );
+      await c.tx.client.query(
+        `UPDATE vinculo v SET fim = greatest(v.fim, ($2::date + time '12:00') AT TIME ZONE u.fuso)
+           FROM unidade u WHERE u.id = v.unidade_id AND v.local_id = $1 AND v.fim > now()`,
+        [s.local_id, novo],
+      );
+    }
+    const n = conf.data.nights_added;
+    const quarto = await this.quartoDe(c, s);
+    const pago = pagamento.provedor === 'salabim_pay' ? 'Pagamento confirmado! ' : '';
+    await this.falar(
+      c,
+      s,
+      `${pago}Sua estadia foi estendida: o check-out agora é em ${dm(novo)}, às 12h (${n} ${n === 1 ? 'noite' : 'noites'} a mais). Código: ${conf.data.booking_id}.${pagamento.provedor === 'conta_quarto' ? ` O valor (${brl(pagamento.valorCentavos / 100)}) vai para a conta do quarto.` : ''}`,
+    );
+    await this.acoes.notaInterna(
+      c,
+      s.id,
+      `Estadia estendida até ${dm(novo)} (${n} ${n === 1 ? 'noite' : 'noites'})${quarto ? `, quarto ${quarto}` : ''} · ${brl(pagamento.valorCentavos / 100)} ${pagamento.provedor === 'salabim_pay' ? 'pago por link' : 'na conta do quarto'}. Confirmação ${conf.data.booking_id}${conf.data.simulated ? ' (simulada)' : ''}.`,
+      { tipo: 'sistema' },
+    );
+    await this.acoes.atualizar(c, await this.acoes.carregar(c, s.id), { resumo: `Estadia estendida até ${dm(novo)}${quarto ? ` · quarto ${quarto}` : ''}` });
+    await this.avisarRecepcao(c, s, `Estadia estendida${quarto ? `: quarto ${quarto}` : ''}`, `Check-out agora em ${dm(novo)} · ${brl(pagamento.valorCentavos / 100)}`);
+  }
+
+  private async quartoDe(c: Ctx, s: SolicitacaoRow): Promise<string | null> {
+    if (!s.local_id) return null;
+    return (await c.tx.client.query<{ identificador: string }>('SELECT identificador FROM local WHERE id = $1', [s.local_id])).rows[0]?.identificador ?? null;
+  }
+
   // ---------- auxiliares ----------
 
   /** "2" quando há opções é a escolha; um nome quando a pergunta é o titular é o nome. */
   private respostaDireta(r: ReservaRow, ex: ExtracaoReserva, texto: string): ExtracaoReserva {
     const t = texto.trim();
+    if (r.estado === 'cotada' && !ex.sim && SIM.test(t)) return { ...ex, sim: true, sobreReserva: true };
     if (r.estado === 'opcoes' && !ex.escolha) {
       const n = /^(?:op[cç][aã]o\s*)?(\d{1,2})[.!]?$/i.exec(t)?.[1];
       if (n) return { ...ex, escolha: Number(n), sobreReserva: true };
@@ -545,7 +781,7 @@ export class Reservas {
   private async mudar(c: Ctx, r: ReservaRow, campos: Record<string, unknown>): Promise<ReservaRow> {
     const chaves = Object.keys(campos);
     if (!chaves.length) return r;
-    const json = new Set(['pedido', 'busca', 'escolha']);
+    const json = new Set(['pedido', 'busca', 'escolha', 'extensao']);
     const sets = chaves.map((k, i) => `${k} = $${i + 2}${json.has(k) ? '::jsonb' : ''}`);
     const vals = chaves.map((k) => (json.has(k) && campos[k] !== null ? JSON.stringify(campos[k]) : campos[k]));
     const q = await c.tx.client.query<ReservaRow>(
@@ -563,11 +799,17 @@ export class Reservas {
   }
 
   /** A VOA falhou: o hóspede é avisado e a recepção assume. */
-  private async falhou(c: Ctx, s: SolicitacaoRow, r: ReservaRow, e: unknown) {
+  private async falhou(
+    c: Ctx,
+    s: SolicitacaoRow,
+    r: ReservaRow,
+    e: unknown,
+    aviso = 'Tive um problema para consultar a disponibilidade agora. Vou passar o seu pedido para a recepção, que te responde por aqui.',
+  ) {
     this.log.warn(`VOA falhou (reserva ${r.id}): ${(e as Error).message}`);
     await this.mudar(c, r, { estado: 'erro' });
-    await this.acoes.notaInterna(c, s.id, `Reserva automática parou: a VOA respondeu com erro (${(e as Error).message.slice(0, 200)}). Pedido: ${pessoasTexto(r.pedido)}, ${r.pedido.checkIn ?? '?'} a ${r.pedido.checkOut ?? '?'}.`, { tipo: 'sistema' });
-    await this.falar(c, s, 'Tive um problema para consultar a disponibilidade agora. Vou passar o seu pedido para a recepção, que te responde por aqui.');
+    await this.acoes.notaInterna(c, s.id, `${r.tipo === 'extensao' ? 'Mais noites' : 'Reserva automática'} parou: erro (${(e as Error).message.slice(0, 200)}). Pedido: ${pessoasTexto(r.pedido)}, ${r.pedido.checkIn ?? '?'} a ${r.pedido.checkOut ?? '?'}.`, { tipo: 'sistema' });
+    await this.falar(c, s, aviso);
     const recepcao = await this.unidades.setorPorChave(c.tx, s.unidade_id, 'recepcao');
     const atual = await this.acoes.carregar(c, s.id);
     if (recepcao && ['automacao', 'resolvida'].includes(atual.estado)) {

@@ -54,7 +54,8 @@ export class Saida {
                 s.id AS solicitacao_id, s.idioma AS idioma_destino, s.ultima_msg_solicitante_em, s.jornada_versao_id,
                 s.resumo, s.unidade_id, s.teste, s.local_id, st.telefone, cw.phone_number_id, cw.credencial_ref, cw.tipo AS canal_tipo,
                 (SELECT u.nome FROM unidade u WHERE u.id = s.unidade_id) AS hotel,
-                (SELECT l.codigo_qr FROM local l WHERE l.id = s.local_id) AS codigo_qr
+                (SELECT l.codigo_qr FROM local l WHERE l.id = s.local_id) AS codigo_qr,
+                (SELECT u.codigo_publico FROM unidade u WHERE u.id = s.unidade_id) AS codigo_publico
            FROM mensagem m
            JOIN solicitacao s ON s.id = m.solicitacao_id
            JOIN solicitante st ON st.id = s.solicitante_id
@@ -148,6 +149,17 @@ export class Saida {
           dados: { tipo: 'chat', solicitacaoId: dados.solicitacao_id },
           alta: false,
           url: `/q/${dados.codigo_qr}`,
+        });
+      } else if (web && !dados.teste && String(dados.telefone).startsWith('visitante:')) {
+        // Chat do hotel: o aviso vai só para a sessão daquele visitante.
+        await this.nucleo.enfileirar(c, 'notificacao', {
+          orgId,
+          chatSessaoId: String(dados.telefone).slice('visitante:'.length),
+          titulo: dados.hotel ?? 'Hotel',
+          corpo: (texto || AVISO_MIDIA[idiomaDosTextos(dados.idioma_destino)]).slice(0, 180),
+          dados: { tipo: 'chat', solicitacaoId: dados.solicitacao_id },
+          alta: false,
+          url: `/h/${dados.codigo_publico}`,
         });
       }
       c.ef.depois(() =>

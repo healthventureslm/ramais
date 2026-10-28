@@ -31,8 +31,9 @@ aplicarAparencia(aparenciaSalva());
 const raiz = createRoot(document.getElementById('raiz')!);
 const montar = (n: ReactNode) => raiz.render(<StrictMode>{n}</StrictMode>);
 
-// /q/<código>: o QR do quarto abre o chat do hóspede, sem login. O resto é o app da equipe.
+// /q/<código>: o QR do quarto abre o chat do hóspede, sem login. /h/<código>: o QR (ou link no
+// site) do hotel abre o chat de quem ainda vai se hospedar. O resto é o app da equipe.
 // Cada um baixa só o seu código.
-const qr = /^\/q\/([A-Za-z0-9_-]{4,40})\/?$/.exec(window.location.pathname);
-if (qr) void import('./telas/ChatQuarto').then(({ ChatQuarto }) => montar(<ChatQuarto codigo={qr[1]!} />));
+const qr = /^\/([qh])\/([A-Za-z0-9_-]{4,40})\/?$/.exec(window.location.pathname);
+if (qr) void import('./telas/ChatQuarto').then(({ ChatQuarto }) => montar(<ChatQuarto codigo={qr[2]!} modo={qr[1] === 'h' ? 'hotel' : 'quarto'} />));
 else void import('./App').then(({ App }) => montar(<App />));

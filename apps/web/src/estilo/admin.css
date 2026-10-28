@@ -30,3 +30,6 @@
 /* QR na tela: precisa de fundo branco para a câmera ler, também no tema escuro. */
 .admin-qr { display: grid; justify-items: center; gap: var(--space-3); }
 .admin-qr img { background: var(--white); border-radius: var(--radius-md); padding: var(--space-2); }
+.admin-qr-hotel { align-items: center; gap: var(--space-4); }
+.admin-qr-hotel img { background: var(--white); border-radius: var(--radius-md); padding: var(--space-2); flex: none; }
+.admin-qr-hotel a { overflow-wrap: anywhere; }

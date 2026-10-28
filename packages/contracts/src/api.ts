@@ -268,6 +268,34 @@ export interface PedidoView {
   lancadoEm: string | null;
   quarto: string | null;
   criadoEm: string;
+  /** Pago por link (Pix ou cartão); nulo = vai para a conta do quarto. */
+  pagamento: { estado: 'aguardando' | 'paga' | 'expirada' | 'cancelada' | 'estornada'; link: string | null; valorCentavos: number } | null;
+}
+
+/** "Minha conta" no chat do quarto: o que foi pedido pelo Ramais na estadia, pago ou não. */
+export interface ContaHospedeView {
+  itens: {
+    id: string;
+    /** estadia: noites a mais. */
+    tipo: 'compra' | 'agendamento' | 'estadia';
+    nome: string;
+    quantidade: number;
+    agendadoPara: string | null;
+    criadoEm: string;
+    valorCentavos: number;
+    /** pago: Pix ou cartão; aguardando: link em aberto; na_conta: paga no check-out. */
+    situacao: 'pago' | 'aguardando' | 'na_conta';
+    link: string | null;
+    /** Noites a mais: o período. */
+    de: string | null;
+    ate: string | null;
+  }[];
+  pagoCentavos: number;
+  /** Na conta do quarto e com link em aberto. */
+  abertoCentavos: number;
+  /** O que o "Pagar agora" cobra (na conta, sem link em aberto). */
+  aPagarCentavos: number;
+  pagamentoOnline: boolean;
 }
 
 // ---------- Chat do quarto (QR → chat no navegador do hóspede) ----------
@@ -311,7 +339,8 @@ export interface ChatMensagemView {
 
 export interface ChatView {
   hotel: string;
-  quarto: string;
+  /** Nulo no chat do hotel (visitante, ainda sem quarto). */
+  quarto: string | null;
   tipoLocal: string;
   /** Idioma em que o hóspede está escrevendo (o da conversa), quando já se sabe. A tela o segue. */
   idioma: string | null;

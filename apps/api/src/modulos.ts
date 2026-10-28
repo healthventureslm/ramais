@@ -8,6 +8,8 @@ import { ConhecimentoController } from './modules/admin/conhecimento.controller.
 import { EquipeController } from './modules/admin/equipe.controller.js';
 import { LocaisController } from './modules/admin/locais.controller.js';
 import { RelatorioController } from './modules/admin/relatorio.controller.js';
+import { CobrancasController } from './modules/cobrancas/cobrancas.controller.js';
+import { Cobrancas } from './modules/cobrancas/cobrancas.service.js';
 import { ChatQuartoController } from './modules/canais/chat-quarto.controller.js';
 import { DerivarMidia } from './modules/canais/derivar-midia.js';
 import { ProcessarWebhook } from './modules/canais/processar-webhook.js';
@@ -23,6 +25,7 @@ import { NotificacoesController } from './modules/equipes/notificacoes.controlle
 import { CatalogoController } from './modules/admin/catalogo.controller.js';
 import { PedidosController } from './modules/pedidos/pedidos.controller.js';
 import { Pedidos } from './modules/pedidos/pedidos.service.js';
+import { ConversaPedidos } from './modules/pedidos/conversa-pedidos.service.js';
 import { ReservasController } from './modules/reservas/reservas.controller.js';
 import { Reservas } from './modules/reservas/reservas.service.js';
 import { Presencas } from './modules/equipes/presenca.service.js';
@@ -36,7 +39,7 @@ import { SolicitacoesController } from './modules/solicitacoes/solicitacoes.cont
 import { Processadores } from './worker/processadores.js';
 
 /** Serviços de domínio, compartilhados pelos dois processos. */
-const SERVICOS = [Acoes, Comandos, Consultas, Pedidos, Reservas, Distribuicao, Escalonamento, Presencas, MotorFluxo, Orquestrador, ProcessarWebhook, Saida, DerivarMidia];
+const SERVICOS = [Acoes, Comandos, Consultas, Cobrancas, Pedidos, ConversaPedidos, Reservas, Distribuicao, Escalonamento, Presencas, MotorFluxo, Orquestrador, ProcessarWebhook, Saida, DerivarMidia];
 
 @Module({
   imports: [InfraModule.paraProcesso('api')],
@@ -48,6 +51,7 @@ const SERVICOS = [Acoes, Comandos, Consultas, Pedidos, Reservas, Distribuicao, E
     CatalogoController,
     PedidosController,
     ReservasController,
+    CobrancasController,
     SolicitacoesController,
     DiretasController,
     DashboardController,

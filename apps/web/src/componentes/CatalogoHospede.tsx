@@ -1,6 +1,6 @@
 import { Badge, Button, EmptyState, IconButton, ListGroup, ListItem, Sheet, Textarea } from '@healthventureslm/design-system';
-import type { CatalogoItemView, PedidoReq, PedidoView } from '@ramais/contracts';
-import { ArrowLeft, Minus, Plus, ShoppingBag } from 'lucide-react';
+import type { CatalogoItemView, ContaHospedeView, PedidoReq, PedidoView } from '@ramais/contracts';
+import { ArrowLeft, CreditCard, Minus, Plus, ShoppingBag, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import '../estilo/catalogo-hospede.css';
 
@@ -31,6 +31,20 @@ export interface TextosCatalogo {
   estadoConcluido: string;
   cancelarPedido: string;
   nenhumPedido: string;
+  /** Pago por link (Pix ou cartão) e o botão para pagar o link em aberto. */
+  pago: string;
+  pagar: string;
+  /** Minha conta. */
+  minhaConta: string;
+  contaEmAberto: string;
+  situacaoAguardando: string;
+  situacaoNaConta: string;
+  pagarAgora: string;
+  contaVazia: string;
+  contaRodape: string;
+  noiteAMais: string;
+  noitesAMais: string;
+  linkAberto: string;
   menos: string;
   mais: string;
 }
@@ -41,6 +55,8 @@ export interface ApiCatalogo {
   pedir: (b: PedidoReq) => Promise<PedidoView>;
   pedidos: () => Promise<{ pedidos: PedidoView[] }>;
   cancelar: (id: string) => Promise<unknown>;
+  conta: () => Promise<ContaHospedeView>;
+  pagarConta: () => Promise<{ link: string | null; valorCentavos: number }>;
 }
 
 const brl = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -329,10 +345,15 @@ export function MeusPedidos({
                 subtitleParts={[
                   p.agendadoPara ? `${quando(p.agendadoPara)} · ${p.quantidade} ${t.pessoas.toLowerCase()}` : quando(p.criadoEm),
                   p.totalCentavos ? brl(p.totalCentavos) : null,
+                  p.pagamento?.estado === 'paga' ? t.pago : null,
                 ].filter(Boolean)}
                 meta={<Badge variant={e.variante}>{e.texto}</Badge>}
                 actions={
-                  podeCancelar ? (
+                  p.pagamento?.estado === 'aguardando' && p.pagamento.link ? (
+                    <Button size="sm" variant="secondary" onClick={() => window.open(p.pagamento!.link!, '_blank', 'noopener')}>
+                      {t.pagar}
+                    </Button>
+                  ) : podeCancelar ? (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -351,6 +372,128 @@ export function MeusPedidos({
             );
           })}
         </ListGroup>
+      )}
+    </Sheet>
+  );
+}
+
+/**
+ * "Minha conta": o que foi pedido pelo chat na estadia, o que já foi pago (Pix ou cartão) e o que
+ * está em aberto, com o total de cada um. Com pagamento online, paga tudo de uma vez por link.
+ */
+export function MinhaConta({
+  aberto,
+  aoFechar,
+  api,
+  idioma,
+  t,
+  aoErro,
+  aoPagar,
+}: {
+  aberto: boolean;
+  aoFechar: () => void;
+  api: ApiCatalogo;
+  idioma: string;
+  t: TextosCatalogo;
+  aoErro: (msg: string) => void;
+  aoPagar: () => void;
+}) {
+  const [conta, setConta] = useState<ContaHospedeView | null>(null);
+  const [pagando, setPagando] = useState(false);
+  const carregar = () =>
+    api
+      .conta()
+      .then(setConta)
+      .catch((e: Error) => {
+        setConta(null);
+        aoErro(e.message);
+      });
+  useEffect(() => {
+    if (aberto) {
+      setConta(null);
+      void carregar();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto]);
+
+  const dia = (iso: string) => new Intl.DateTimeFormat(idioma, { day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
+  const quando = (iso: string) =>
+    new Intl.DateTimeFormat(idioma, { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(iso));
+
+  async function pagar() {
+    // Abre a aba já no clique (o navegador bloqueia janela aberta depois de esperar a rede).
+    const janela = window.open('', '_blank');
+    setPagando(true);
+    try {
+      const r = await api.pagarConta();
+      if (r.link && janela) janela.location.href = r.link;
+      else janela?.close();
+      aoPagar();
+      void carregar();
+    } catch (e) {
+      janela?.close();
+      aoErro((e as Error).message);
+    } finally {
+      setPagando(false);
+    }
+  }
+
+  const SITUACAO = {
+    pago: { texto: t.pago, variante: 'positive' as const },
+    aguardando: { texto: t.situacaoAguardando, variante: 'warning' as const },
+    na_conta: { texto: t.situacaoNaConta, variante: 'neutral' as const },
+  };
+
+  return (
+    <Sheet open={aberto} onClose={aoFechar} detents={[0.8]} title={t.minhaConta}>
+      {conta === null ? (
+        <EmptyState loading size="sm" />
+      ) : conta.itens.length === 0 ? (
+        <EmptyState size="sm" icon={<Wallet />} title={t.contaVazia} description={t.contaRodape} />
+      ) : (
+        <div className="conta-hosp">
+          <div className="conta-hosp__totais">
+            <div>
+              <span className="cat-hosp__rotulo">{t.contaEmAberto}</span>
+              <strong>{brl(conta.abertoCentavos)}</strong>
+            </div>
+            <div>
+              <span className="cat-hosp__rotulo">{t.pago}</span>
+              <strong>{brl(conta.pagoCentavos)}</strong>
+            </div>
+          </div>
+          {conta.aPagarCentavos > 0 && (
+            <Button block iconLeft={<CreditCard />} loading={pagando} onClick={() => void pagar()}>
+              {`${t.pagarAgora} · ${brl(conta.aPagarCentavos)}`}
+            </Button>
+          )}
+          <ListGroup>
+            {conta.itens.map((i) => {
+              const s = SITUACAO[i.situacao];
+              const titulo =
+                i.tipo === 'estadia'
+                  ? `${i.quantidade} ${i.quantidade === 1 ? t.noiteAMais : t.noitesAMais}${i.de && i.ate ? ` · ${dia(i.de)}–${dia(i.ate)}` : ''}`
+                  : `${i.tipo === 'compra' ? `${i.quantidade}× ` : ''}${i.nome}`;
+              return (
+                <ListItem
+                  key={i.id}
+                  wrap
+                  title={titulo}
+                  subtitleParts={[quando(i.agendadoPara ?? i.criadoEm), brl(i.valorCentavos)]}
+                  meta={<Badge variant={s.variante}>{s.texto}</Badge>}
+                  actions={
+                    i.situacao === 'aguardando' && i.link ? (
+                      <Button size="sm" variant="secondary" onClick={() => window.open(i.link!, '_blank', 'noopener')}>
+                        {t.pagar}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </ListGroup>
+          <p className="conta-hosp__rodape">{t.contaRodape}</p>
+        </div>
       )}
     </Sheet>
   );

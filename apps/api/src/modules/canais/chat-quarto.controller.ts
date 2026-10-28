@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -14,8 +15,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { ServicosIA } from '@ramais/ai';
-import { ArquivoMidia, ChatMensagemReq, ChatSessaoReq, ChatTextosReq, InscricaoPushReq, PedidoReq, type ChatView } from '@ramais/contracts';
-import { resolverChat, resolverQuarto } from '@ramais/db';
+import { ArquivoMidia, ChatMensagemReq, ChatSessaoReq, ChatTextosReq, InscricaoPushReq, PedidoReq, type ChatView, type ContaHospedeView } from '@ramais/contracts';
+import { resolverChat, resolverHotel, resolverQuarto } from '@ramais/db';
 import type { Response } from 'express';
 import type pg from 'pg';
 import { z } from 'zod';
@@ -28,7 +29,7 @@ import { IA, POOL } from '../../infra/tokens.js';
 import { Unidades } from '../../infra/unidades.js';
 import { comContextoIA } from '../../infra/uso-ia.js';
 import { Uuid, Zod } from '../../infra/validacao.js';
-import { Orquestrador, solicitanteDoQuarto, type EntradaMensagem } from '../jornada/orquestrador.js';
+import { Orquestrador, solicitanteDoQuarto, solicitanteVisitante, type EntradaMensagem } from '../jornada/orquestrador.js';
 import { Pedidos } from '../pedidos/pedidos.service.js';
 
 const ChatSetorReq = z.object({ chave: z.string().regex(/^[a-z][a-z0-9_]*$/).max(60) });
@@ -42,9 +43,15 @@ interface SessaoChat {
   id: string;
   orgId: string;
   unidadeId: string;
-  localId: string;
+  /** Nulo no chat do hotel (visitante, ainda sem quarto). */
+  localId: string | null;
   estadiaDesde: Date;
 }
+
+/** Quem fala nesta sessão: o quarto (uma conversa por quarto) ou o visitante (uma por sessão). */
+const solicitanteDa = (s: SessaoChat) => (s.localId ? solicitanteDoQuarto(s.localId) : solicitanteVisitante(s.id));
+/** O chat do hotel guarda a conversa do visitante por 30 dias (ele volta pelo mesmo link). */
+const VISITANTE_DIAS = 30;
 
 /**
  * Chat do quarto: o QR do quarto abre um chat no navegador, sem WhatsApp e sem custo da Meta.
@@ -127,6 +134,28 @@ export class ChatQuartoController {
     });
   }
 
+  /**
+   * Chat do hotel: o QR (ou link no site) do hotel abre um chat para quem ainda não está
+   * hospedado. Tira dúvidas pela base de conhecimento e reserva pela VOA; sem quarto, sem catálogo.
+   */
+  @Post('hotel')
+  @HttpCode(201)
+  async abrirHotel(@Body(new Zod(ChatSessaoReq)) b: ChatSessaoReq) {
+    const u = await resolverHotel(this.pool, b.codigo);
+    if (!u) throw new NotFoundException('Link do hotel inválido.');
+    const token = randomBytes(32).toString('base64url');
+    return this.nucleo.executar(u.orgId, async (c) => {
+      const ate = new Date(Date.now() + VISITANTE_DIAS * 86_400_000);
+      await c.tx.client.query(
+        `INSERT INTO chat_sessao (org_id, unidade_id, local_id, token_hash, estadia_desde, expira_em, idioma)
+         VALUES ($1, $2, NULL, $3, now(), $4, $5)`,
+        [u.orgId, u.unidadeId, hash(token), ate, b.idioma ?? null],
+      );
+      await this.canalWeb(c, u.unidadeId);
+      return { token, ...(await this.cabecalho(c, u.unidadeId, null)), expiraEm: ate.toISOString() };
+    });
+  }
+
   /** Menu principal: o hóspede escolhe o setor; vai para lá a qualquer momento (ver Orquestrador.escolherSetor). */
   @Post('setor')
   @HttpCode(200)
@@ -136,6 +165,7 @@ export class ChatQuartoController {
       const s = await this.sessao(c, sessaoId);
       return { s, canalId: await this.canalWeb(c, s.unidadeId) };
     });
+    if (!s.localId) throw new BadRequestException('o menu de setores é do chat do quarto');
     return this.orquestrador.escolherSetor({
       orgId,
       unidadeId: s.unidadeId,
@@ -154,7 +184,8 @@ export class ChatQuartoController {
     const { orgId, sessaoId } = await this.resolver(token);
     return this.nucleo.executar(orgId, async (c) => {
       const s = await this.sessao(c, sessaoId);
-      return { itens: await this.pedidos.itens(c, s.unidadeId, true), hoje: await this.pedidos.hoje(c, s.unidadeId) };
+      // O catálogo vai para a conta do quarto: no chat do hotel (sem quarto) não aparece.
+      return { itens: s.localId ? await this.pedidos.itens(c, s.unidadeId, true) : [], hoje: await this.pedidos.hoje(c, s.unidadeId) };
     });
   }
 
@@ -182,6 +213,7 @@ export class ChatQuartoController {
       const s = await this.sessao(c, sessaoId);
       return { s, canalId: await this.canalWeb(c, s.unidadeId) };
     });
+    if (!s.localId) throw new BadRequestException('pedidos do catálogo são do chat do quarto');
     return this.pedidos.criarDoHospede({ orgId, unidadeId: s.unidadeId, localId: s.localId, canalId, naoAntesDe: s.estadiaDesde.toISOString(), req: b });
   }
 
@@ -191,8 +223,32 @@ export class ChatQuartoController {
     const { orgId, sessaoId } = await this.resolver(token);
     return this.nucleo.executar(orgId, async (c) => {
       const s = await this.sessao(c, sessaoId);
-      return { pedidos: await this.pedidos.doQuarto(c, s.localId, s.estadiaDesde) };
+      return { pedidos: s.localId ? await this.pedidos.doQuarto(c, s.localId, s.estadiaDesde) : [] };
     });
+  }
+
+  /** "Minha conta": o que foi pedido na estadia, o que já foi pago e o que está em aberto. */
+  @Get('conta')
+  async conta(@Headers('x-chat') token: string | undefined): Promise<ContaHospedeView> {
+    const { orgId, sessaoId } = await this.resolver(token);
+    return this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      if (!s.localId) throw new BadRequestException('a conta é do chat do quarto');
+      return this.pedidos.contaDoQuarto(c, s.localId, s.estadiaDesde);
+    });
+  }
+
+  /** Pagar agora (Pix ou cartão) tudo o que está em aberto na conta do quarto. */
+  @Post('conta/pagar')
+  @HttpCode(200)
+  async pagarConta(@Headers('x-chat') token: string | undefined) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    const { s, canalId } = await this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      return { s, canalId: await this.canalWeb(c, s.unidadeId) };
+    });
+    if (!s.localId) throw new BadRequestException('a conta é do chat do quarto');
+    return this.pedidos.pagarConta({ orgId, unidadeId: s.unidadeId, localId: s.localId, canalId, naoAntesDe: s.estadiaDesde.toISOString() });
   }
 
   @Post('pedidos/:id/cancelar')
@@ -201,6 +257,7 @@ export class ChatQuartoController {
     const { orgId, sessaoId } = await this.resolver(token);
     await this.nucleo.executar(orgId, async (c) => {
       const s = await this.sessao(c, sessaoId);
+      if (!s.localId) throw new NotFoundException();
       await this.pedidos.cancelarPeloHospede(c, s.localId, s.estadiaDesde, id);
     });
     return { ok: true };
@@ -242,7 +299,7 @@ export class ChatQuartoController {
           WHERE st.telefone = $1 AND so.unidade_id = $2 AND m.visibilidade = 'externa' AND m.criado_em >= $3
             AND (m.autor_tipo = 'solicitante' OR m.status_envio IN ('enviada', 'entregue', 'lida'))
           ORDER BY m.criado_em DESC, m.id DESC LIMIT 200`,
-        [solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
+        [solicitanteDa(s), s.unidadeId, s.estadiaDesde],
       );
       // O idioma da conversa (o último que a detecção firmou nesta estadia), para a tela segui-lo:
       // celular em inglês com o hóspede escrevendo em português mostra a tela em português.
@@ -250,7 +307,7 @@ export class ChatQuartoController {
         `SELECT so.idioma FROM solicitacao so JOIN solicitante st ON st.id = so.solicitante_id
           WHERE st.telefone = $1 AND so.unidade_id = $2 AND so.criado_em >= $3 AND so.contexto->>'idiomaDefinido' = 'true'
           ORDER BY so.criado_em DESC LIMIT 1`,
-        [solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
+        [solicitanteDa(s), s.unidadeId, s.estadiaDesde],
       );
       const prefixo = `web.${s.id}.`;
       return {
@@ -315,7 +372,7 @@ export class ChatQuartoController {
            JOIN solicitacao so ON so.id = m.solicitacao_id JOIN solicitante st ON st.id = so.solicitante_id
           WHERE m.id = $1 AND st.telefone = $2 AND so.unidade_id = $3 AND m.criado_em >= $4
             AND m.visibilidade = 'externa' AND m.midia_chave IS NOT NULL`,
-        [mensagemId, solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
+        [mensagemId, solicitanteDa(s), s.unidadeId, s.estadiaDesde],
       );
       return r.rows[0];
     });
@@ -343,14 +400,18 @@ export class ChatQuartoController {
 
   /** Setores do Menu principal (os do catálogo da jornada que estão ativos) e com qual o hóspede fala agora. */
   private async menu(c: Ctx, s: SessaoChat): Promise<Pick<ChatView, 'setores' | 'setorAtual' | 'temCatalogo'>> {
+    // Chat do hotel: sem Menu principal (a IA responde e reserva; "falar com alguém" chama a equipe).
+    if (!s.localId) return { setores: [], setorAtual: null, temCatalogo: false };
     const { cfg } = await this.unidades.versaoAtual(c.tx, s.unidadeId);
     const ativos = new Set((await this.unidades.setores(c.tx, s.unidadeId)).map((x) => x.chave));
     const atual = await c.tx.client.query<{ chave: string }>(
       `SELECT st.chave FROM solicitacao so JOIN solicitante sl ON sl.id = so.solicitante_id JOIN setor st ON st.id = so.setor_id
         WHERE sl.telefone = $1 AND so.unidade_id = $2 AND so.criado_em >= $3
           AND so.estado IN ('na_fila', 'oferecida', 'em_atendimento', 'aguardando_solicitante')
+          -- Pedido fechado conversando, ainda na fila: a conversa não está com o setor (ver Orquestrador).
+          AND NOT (coalesce(so.contexto->>'doCarrinho', '') = 'true' AND so.estado IN ('na_fila', 'oferecida'))
         ORDER BY so.criado_em DESC LIMIT 1`,
-      [solicitanteDoQuarto(s.localId), s.unidadeId, s.estadiaDesde],
+      [solicitanteDa(s), s.unidadeId, s.estadiaDesde],
     );
     return {
       setores: cfg.setores.filter((x) => ativos.has(x.chave)).map((x) => ({ chave: x.chave, nome: x.nome, nomes: x.nomes })),
@@ -361,7 +422,11 @@ export class ChatQuartoController {
     };
   }
 
-  private async cabecalho(c: Ctx, unidadeId: string, localId: string) {
+  private async cabecalho(c: Ctx, unidadeId: string, localId: string | null) {
+    if (!localId) {
+      const u = await c.tx.client.query<{ nome: string }>('SELECT nome FROM unidade WHERE id = $1', [unidadeId]);
+      return { hotel: u.rows[0]!.nome, quarto: null, tipoLocal: 'hotel' };
+    }
     const r = await c.tx.client.query<{ hotel: string; quarto: string; tipo: string }>(
       'SELECT u.nome AS hotel, l.identificador AS quarto, l.tipo FROM local l JOIN unidade u ON u.id = l.unidade_id WHERE l.id = $1 AND u.id = $2',
       [localId, unidadeId],
@@ -391,13 +456,20 @@ export class ChatQuartoController {
     m: { tipo: EntradaMensagem['tipo']; texto: string | null; midiaChave: string | null; midiaMime: string | null },
   ) {
     const canalId = await this.canalWeb(c, s.unidadeId);
-    const de = solicitanteDoQuarto(s.localId);
-    // Nome do solicitante: o quarto (a equipe vê "Quarto 412" na lista).
-    await c.tx.client.query(
-      `INSERT INTO solicitante (org_id, telefone, nome) SELECT $1, $2, 'Quarto ' || l.identificador FROM local l WHERE l.id = $3
-       ON CONFLICT (org_id, telefone) DO NOTHING`,
-      [s.orgId, de, s.localId],
-    );
+    const de = solicitanteDa(s);
+    // Nome do solicitante: o quarto (a equipe vê "Quarto 412" na lista) ou "Visitante" no chat do hotel.
+    if (s.localId) {
+      await c.tx.client.query(
+        `INSERT INTO solicitante (org_id, telefone, nome) SELECT $1, $2, 'Quarto ' || l.identificador FROM local l WHERE l.id = $3
+         ON CONFLICT (org_id, telefone) DO NOTHING`,
+        [s.orgId, de, s.localId],
+      );
+    } else {
+      await c.tx.client.query(`INSERT INTO solicitante (org_id, telefone, nome) VALUES ($1, $2, 'Visitante (chat do hotel)') ON CONFLICT (org_id, telefone) DO NOTHING`, [
+        s.orgId,
+        de,
+      ]);
+    }
     const e: EntradaMensagem = {
       orgId: s.orgId,
       unidadeId: s.unidadeId,

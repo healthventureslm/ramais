@@ -28,7 +28,10 @@ export class PedidosController {
   /** O pedido de um atendimento (o cartão ao lado da conversa); nulo se o atendimento não veio do catálogo. */
   @Get('solicitacao/:id')
   porSolicitacao(@SessaoAtual() s: Sessao, @Param('id', Uuid) id: string) {
-    return this.nucleo.executar(s.orgId, async (c) => ({ pedido: await this.pedidos.porSolicitacao(c, id, pessoaDa(s)) }));
+    return this.nucleo.executar(s.orgId, async (c) => {
+      const pedidos = await this.pedidos.porSolicitacao(c, id, pessoaDa(s));
+      return { pedido: pedidos[0] ?? null, pedidos };
+    });
   }
 
   @Post(':id/confirmar')
@@ -47,6 +50,13 @@ export class PedidosController {
   @HttpCode(200)
   lancar(@SessaoAtual() s: Sessao, @Param('id', Uuid) id: string) {
     return this.pedidos.lancar(s.orgId, id, pessoaDa(s));
+  }
+
+  /** Manda ao hóspede um link (Pix ou cartão) para pagar os itens do atendimento. */
+  @Post(':id/cobrar')
+  @HttpCode(200)
+  cobrar(@SessaoAtual() s: Sessao, @Param('id', Uuid) id: string) {
+    return this.pedidos.cobrarPorLink(s.orgId, id, pessoaDa(s));
   }
 
   @Post(':id/concluir')

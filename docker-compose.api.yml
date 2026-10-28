@@ -96,6 +96,11 @@ x-ambiente-app: &ambiente-app
   VOA_WEBHOOK_SEGREDO: ${VOA_WEBHOOK_SEGREDO:-}
   VOA_LINK_MINUTOS: ${VOA_LINK_MINUTOS:-120}
 
+  # Links de pagamento do Salabim Pay (pedido pago na hora, consumo, mais noites). Sem chave, tudo na conta do quarto.
+  SALABIM_PAY_URL: ${SALABIM_PAY_URL:-https://pay.salabim.ai/api/v1}
+  SALABIM_PAY_CHAVE: ${SALABIM_PAY_CHAVE:-}
+  SALABIM_LINK_MINUTOS: ${SALABIM_LINK_MINUTOS:-60}
+
 services:
   banco:
     image: postgres:18-alpine

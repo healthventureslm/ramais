@@ -8,6 +8,7 @@ import type { Push } from '../infra/push.js';
 import { PushWeb, type InscricaoWeb } from '../infra/push-web.js';
 import { BOSS, POOL } from '../infra/tokens.js';
 import { DerivarMidia, type DadosDerivarMidia } from '../modules/canais/derivar-midia.js';
+import { Cobrancas } from '../modules/cobrancas/cobrancas.service.js';
 import { ProcessarWebhook } from '../modules/canais/processar-webhook.js';
 import { Saida } from '../modules/canais/saida.js';
 import { Distribuicao } from '../modules/distribuicao/distribuicao.service.js';
@@ -20,8 +21,10 @@ interface DadosNotificacao {
   orgId: string;
   /** Uma pessoa da equipe (app e navegador)… */
   pessoaId?: string;
-  /** …ou o chat de um quarto (navegador do hóspede, nas sessões ainda válidas). */
+  /** …ou o chat de um quarto (navegador do hóspede, nas sessões ainda válidas)… */
   localId?: string;
+  /** …ou a sessão de um visitante do chat do hotel. */
+  chatSessaoId?: string;
   titulo: string;
   corpo: string;
   dados: Record<string, string>;
@@ -58,6 +61,7 @@ export class Processadores implements OnApplicationBootstrap, OnApplicationShutd
     private readonly acoes: Acoes,
     private readonly presencas: Presencas,
     private readonly derivarMidia: DerivarMidia,
+    private readonly cobrancas: Cobrancas,
   ) {}
 
   async onApplicationBootstrap() {
@@ -100,6 +104,7 @@ export class Processadores implements OnApplicationBootstrap, OnApplicationShutd
   async temporizador(d: DadosTemporizador): Promise<void> {
     if (d.tipo === 'oferta_expira') return this.distribuicao.ofertaExpirou(d.orgId, d.ofertaId);
     if (d.tipo === 'escada') return this.escalonamento.avaliar(d.orgId, d.solicitacaoId);
+    if (d.tipo === 'cobranca') return this.cobrancas.conferir(d.orgId, d.cobrancaId, d.tentativa);
     await this.nucleo.executar(d.orgId, async (c) => {
       const s = await this.acoes.carregar(c, d.solicitacaoId);
       const cfg = await this.acoes.config(c, s);
@@ -151,11 +156,17 @@ export class Processadores implements OnApplicationBootstrap, OnApplicationShutd
    * o quarto, em toda sessão do chat ainda válida. Falha aqui não refaz o job (o app já foi avisado).
    */
   private async notificarNavegador(d: DadosNotificacao): Promise<void> {
-    if (!this.pushWeb.disponivel || (!d.pessoaId && !d.localId)) return;
+    if (!this.pushWeb.disponivel || (!d.pessoaId && !d.localId && !d.chatSessaoId)) return;
     const alvos = await this.nucleo.executar(d.orgId, async (c) => {
       const r = d.pessoaId
         ? await c.tx.client.query<InscricaoWeb & { id: string }>('SELECT id, endpoint, p256dh, auth FROM push_web WHERE pessoa_id = $1', [d.pessoaId])
-        : await c.tx.client.query<InscricaoWeb & { id: string }>(
+        : d.chatSessaoId
+          ? await c.tx.client.query<InscricaoWeb & { id: string }>(
+              `SELECT pw.id, pw.endpoint, pw.p256dh, pw.auth FROM push_web pw JOIN chat_sessao cs ON cs.id = pw.chat_sessao_id
+                WHERE cs.id = $1 AND cs.expira_em > now()`,
+              [d.chatSessaoId],
+            )
+          : await c.tx.client.query<InscricaoWeb & { id: string }>(
             `SELECT DISTINCT ON (pw.endpoint) pw.id, pw.endpoint, pw.p256dh, pw.auth
                FROM push_web pw JOIN chat_sessao cs ON cs.id = pw.chat_sessao_id
               WHERE cs.local_id = $1 AND cs.expira_em > now()

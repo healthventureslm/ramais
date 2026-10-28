@@ -323,7 +323,8 @@ export const chatSessao = pgTable('chat_sessao', {
   id: id(),
   orgId: orgId(),
   unidadeId: uuid('unidade_id').notNull(),
-  localId: uuid('local_id').notNull(),
+  /** Nulo no chat do hotel (QR público, quem ainda não está hospedado). */
+  localId: uuid('local_id'),
   tokenHash: text('token_hash').notNull(),
   estadiaDesde: ts('estadia_desde').notNull(),
   expiraEm: ts('expira_em').notNull(),

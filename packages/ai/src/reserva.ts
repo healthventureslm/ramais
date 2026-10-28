@@ -27,6 +27,8 @@ export interface ExtracaoReserva {
   escolha: number | null;
   nome: string | null;
   email: string | null;
+  /** Respondeu "sim" à última pergunta (confirma a cotação). */
+  sim: boolean;
   modelo: string;
 }
 
@@ -66,11 +68,12 @@ export class ExtratorReservaLLM implements ExtratorReserva {
       'wants_booking: true if the guest wants to book a room, check availability or prices for a stay, or extend the current stay. Room service, spa, tours, restaurant tables or complaints are NOT room bookings.',
       'about_booking: true if the message answers or relates to the booking conversation below (dates, people, children ages, choosing an option, name, e-mail, "yes", "ok").',
       'quits: true only if the guest says they no longer want to book.',
-      'extend: true if they want to stay more nights in the stay they already have.',
+      'extend: true if they want to stay more nights in the stay they already have. When extending, check_in is the CURRENT check-out date (where the extra nights start) and check_out is the NEW check-out date; "my check-out is on the 30th" is check_in.',
       'nights: number of nights if stated without a check-out date.',
       'choice: the number of the chosen option when options were shown (the guest may answer "2", "the second", "the cheapest", or a room name).',
       'adults/children: totals for the whole booking; children_ages: one age per child, only if stated.',
       'name: full name of the person the booking is for, only if the guest states it. email: only if stated.',
+      'yes: true if the message is a yes / confirmation to the last question ("yes", "ok", "confirm", "go ahead").',
       'Use null for anything not stated. Never invent values.',
       ctx.conhecido ? `Already known about this booking: ${JSON.stringify(ctx.conhecido)}` : '',
       ctx.opcoes?.length ? `Options shown to the guest:\n${ctx.opcoes.map((o, i) => `${i + 1}. ${o}`).join('\n')}` : '',
@@ -105,8 +108,9 @@ export class ExtratorReservaLLM implements ExtratorReserva {
             choice: nulo('integer'),
             name: nulo('string'),
             email: nulo('string'),
+            yes: { type: 'boolean' },
           },
-          required: ['wants_booking', 'about_booking', 'quits', 'extend', 'check_in', 'check_out', 'nights', 'rooms', 'adults', 'children', 'children_ages', 'choice', 'name', 'email'],
+          required: ['wants_booking', 'about_booking', 'quits', 'extend', 'check_in', 'check_out', 'nights', 'rooms', 'adults', 'children', 'children_ages', 'choice', 'name', 'email', 'yes'],
           additionalProperties: false,
         },
       },
@@ -150,6 +154,7 @@ Reply ONLY with a JSON object with exactly these keys: ${chaves}.` }, pedido.men
       escolha: int(j.choice, 1, 20),
       nome,
       email,
+      sim: j.yes === true,
       modelo: r.modelo,
     };
   }
@@ -169,5 +174,7 @@ export class ExtratorReservaNulo implements ExtratorReserva {
  */
 export function pareceReserva(textos: (string | null | undefined)[]): boolean {
   const t = textos.filter(Boolean).join(' ').toLowerCase();
-  return /\b(book|booking|reserv|availab|vacan|room for|rooms for|a room|stay|nights?|check[- ]?in|check[- ]?out|rate|price|how much|extend|one more (day|night)|another night|di[aá]ria|quartos?|reserv|vagas?|hospedagem|disponib|pernoit|estadia|estender|prorrog|noites?|habitaci|alojamiento|quedarme|noche|zimmer|übernacht|chambre|nuit|camera|notte|予約|泊|空室|房间|预订|入住)/i.test(t);
+  // Sem `\b`: para ele, letra acentuada não é letra e "übernacht" nunca casaria. Chinês e japonês
+  // não separam palavras: valem em qualquer posição.
+  return /(?<!\p{L})(book|booking|reserv|availab|vacan|room for|rooms for|a room|stay|nights?|check[- ]?in|check[- ]?out|rate|price|how much|extend|one more (day|night)|another night|di[aá]ria|quartos?|reserv|vagas?|hospedagem|disponib|pernoit|estadia|estender|prorrog|noites?|habitaci|alojamiento|quedarme|noche|zimmer|übernacht|chambre|nuit|camera|notte)|予約|泊|空室|房间|预订|入住/iu.test(t);
 }

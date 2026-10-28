@@ -10,6 +10,7 @@ import { ClienteMeta } from './meta.js';
 import { Nucleo } from './nucleo.js';
 import { PushFcm, PushLog, type Push } from './push.js';
 import { PushWeb } from './push-web.js';
+import { ClienteSalabim } from './salabim.js';
 import { ClienteVoa } from './voa.js';
 import { TempoReal } from './tempo-real.js';
 import { BOSS, CONFIG, IA, POOL, PROCESSO, type Processo } from './tokens.js';
@@ -101,6 +102,11 @@ export class InfraModule {
           useFactory: (c: Config) => new ClienteVoa({ url: c.VOA_API_URL, token: c.VOA_API_TOKEN, checkout: c.VOA_CHECKOUT_URL }),
         },
         {
+          provide: ClienteSalabim,
+          inject: [CONFIG],
+          useFactory: (c: Config) => new ClienteSalabim({ url: c.SALABIM_PAY_URL, chave: c.SALABIM_PAY_CHAVE }),
+        },
+        {
           provide: PushWeb,
           inject: [CONFIG],
           useFactory: (c: Config) => new PushWeb(c),
@@ -109,7 +115,7 @@ export class InfraModule {
         Nucleo,
         Unidades,
       ],
-      exports: [PROCESSO, CONFIG, POOL, BOSS, IA, TempoReal, ClienteMeta, ARMAZENAMENTO, PUSH, PushWeb, ClienteVoa, Tokens, Nucleo, Unidades],
+      exports: [PROCESSO, CONFIG, POOL, BOSS, IA, TempoReal, ClienteMeta, ARMAZENAMENTO, PUSH, PushWeb, ClienteVoa, ClienteSalabim, Tokens, Nucleo, Unidades],
     };
   }
 }

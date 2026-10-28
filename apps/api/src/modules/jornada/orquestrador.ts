@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { CampoColeta, Gatilho, ResultadoRoteamento } from '@ramais/contracts';
-import { pareceReserva, type ExtracaoReserva, type ServicosIA, type Traducao } from '@ramais/ai';
+import { pareceReserva, type ExtracaoPedido, type ExtracaoReserva, type ServicosIA, type Traducao } from '@ramais/ai';
+import type { CatalogoItemView } from '@ramais/contracts';
 import {
   aplicarGate,
   destinoNovaMensagem,
@@ -24,6 +25,7 @@ import { Distribuicao } from '../distribuicao/distribuicao.service.js';
 import { MotorFluxo, type AnaliseFluxo, type EstadoFluxo } from './motor-fluxo.js';
 import { Acoes } from '../solicitacoes/acoes.js';
 import { Reservas } from '../reservas/reservas.service.js';
+import { ConversaPedidos } from '../pedidos/conversa-pedidos.service.js';
 import type { SolicitacaoRow } from '../solicitacoes/tipos.js';
 
 /** Uma mensagem recebida, já separada do payload do webhook. */
@@ -51,7 +53,9 @@ export interface EntradaMensagem {
 
 /** Chat do quarto: um solicitante por quarto ("quarto:<id>"), em vez de um telefone. */
 export const solicitanteDoQuarto = (localId: string) => `quarto:${localId}`;
-const identidade = (de: string) => (de.startsWith('quarto:') ? de : normalizarTelefone(de));
+/** Chat do hotel (QR público): cada sessão é um visitante, uma conversa só dele. */
+export const solicitanteVisitante = (sessaoId: string) => `visitante:${sessaoId}`;
+const identidade = (de: string) => (/^(quarto|visitante):/.test(de) ? de : normalizarTelefone(de));
 
 interface Preparo {
   solicitacaoId: string;
@@ -75,6 +79,11 @@ interface Analise {
   conhecimento: { responde: boolean; resposta: string | null; confianca: number; fontes: string[]; modelo: string } | null;
   /** Reserva de hospedagem: o que a mensagem diz (só quando a unidade tem a integração e o assunto parece reserva). */
   reserva?: ExtracaoReserva | null;
+  /** Pedido do catálogo pela conversa (só com catálogo ativo e quando o assunto parece pedido). */
+  pedido?: ExtracaoPedido | null;
+  catalogo?: CatalogoItemView[];
+  /** Há reserva de hospedagem ou pedido do catálogo em andamento nesta conversa. */
+  fluxoAtivo?: boolean;
   falhas: string[];
 }
 
@@ -99,6 +108,7 @@ export class Orquestrador {
     private readonly distribuicao: Distribuicao,
     private readonly motor: MotorFluxo,
     private readonly reservas: Reservas,
+    private readonly conversaPedidos: ConversaPedidos,
     private readonly meta: ClienteMeta,
     @Inject(IA) private readonly ia: ServicosIA,
     @Inject(ARMAZENAMENTO) private readonly armazenamento: Armazenamento,
@@ -148,6 +158,8 @@ export class Orquestrador {
           `SELECT * FROM solicitacao s WHERE s.solicitante_id = $1 AND s.unidade_id = $2 AND s.origem = 'externa' AND s.criado_em >= $3
               AND NOT EXISTS (SELECT 1 FROM solicitacao o WHERE o.id::text = s.contexto->>'paralelaDe'
                                 AND o.estado NOT IN ('resolvida', 'encerrada', 'cancelada'))
+              -- Pedido fechado conversando, ainda sem ninguém da equipe: a conversa segue com a IA.
+              AND NOT (coalesce(s.contexto->>'doCarrinho', '') = 'true' AND s.estado IN ('na_fila', 'oferecida'))
             ORDER BY s.criado_em DESC LIMIT 1 FOR UPDATE OF s`,
           [solicitanteId, p.unidadeId, p.naoAntesDe],
         );
@@ -243,6 +255,8 @@ export class Orquestrador {
           `SELECT * FROM solicitacao s WHERE s.solicitante_id = $1 AND s.unidade_id = $2 AND s.origem = 'externa'
               AND NOT EXISTS (SELECT 1 FROM solicitacao o WHERE o.id::text = s.contexto->>'paralelaDe'
                                 AND o.estado NOT IN ('resolvida', 'encerrada', 'cancelada'))
+              -- Pedido fechado conversando, ainda sem ninguém da equipe: a conversa segue com a IA.
+              AND NOT (coalesce(s.contexto->>'doCarrinho', '') = 'true' AND s.estado IN ('na_fila', 'oferecida'))
             ORDER BY s.criado_em DESC LIMIT 1 FOR UPDATE OF s`,
           [solicitanteId, e.unidadeId],
         );
@@ -267,8 +281,8 @@ export class Orquestrador {
           );
           const r = await c.tx.client.query<SolicitacaoRow>(
             `INSERT INTO solicitacao (org_id, unidade_id, solicitante_id, canal_id, origem, estado, etapa, jornada_versao_id,
-                                      local_id, identificado, ultima_msg_solicitante_em, teste)
-             VALUES ($1, $2, $3, $4, 'externa', 'automacao', 'entrada', $5, $6, $7, now(), $8) RETURNING *`,
+                                      local_id, identificado, ultima_msg_solicitante_em, teste, contexto)
+             VALUES ($1, $2, $3, $4, 'externa', 'automacao', 'entrada', $5, $6, $7, now(), $8, $9) RETURNING *`,
             [
               e.orgId,
               e.unidadeId,
@@ -279,6 +293,8 @@ export class Orquestrador {
               // O QR prova que a pessoa esteve no quarto, não quem ela é: dado sensível ainda confere.
               (!e.localId || v.rows[0]?.local_id === e.localId) && (v.rows[0]?.confirmado ?? false),
               e.teste ?? false,
+              // Visitante do chat do hotel: ainda não é hóspede, não há quarto para conferir.
+              JSON.stringify(telefone.startsWith('visitante:') ? { visitante: true } : {}),
             ],
           );
           s = r.rows[0]!;
@@ -408,7 +424,14 @@ export class Orquestrador {
       const local = s.local_id
         ? (await c.tx.client.query('SELECT identificador FROM local WHERE id = $1', [s.local_id])).rows[0]?.identificador
         : null;
-      return { cfg, estado: s.estado, local, conhecimento: conhecimento.rows, reserva: await this.reservas.paraAnalise(c, s) };
+      return {
+        cfg,
+        estado: s.estado,
+        local,
+        conhecimento: conhecimento.rows,
+        reserva: await this.reservas.paraAnalise(c, s),
+        pedidos: await this.conversaPedidos.paraAnalise(c, s),
+      };
     });
 
     const roteador = this.ia.roteador(contexto.cfg.setores);
@@ -419,7 +442,13 @@ export class Orquestrador {
     // Reserva de hospedagem: em andamento, toda mensagem passa pelo extrator; senão, só a que tem cara de reserva.
     const lerReserva =
       automacao && contexto.reserva.hotel !== null && Boolean(a.textoBase) && (contexto.reserva.ativa !== null || pareceReserva([a.textoBase, textoEn]));
-    const [rot, kbAutomacao, reserva] = await Promise.all([
+    // Pedido do catálogo pela conversa: em andamento, toda mensagem; senão, a que fala de cardápio, passeio, spa…
+    const lerPedido =
+      automacao &&
+      contexto.pedidos.itens.length > 0 &&
+      Boolean(a.textoBase) &&
+      (contexto.pedidos.carrinho !== null || this.conversaPedidos.pareceCatalogo([a.textoBase, textoEn], contexto.pedidos.itens));
+    const [rot, kbAutomacao, reserva, pedido] = await Promise.all([
       tentar('roteamento', () =>
         roteador.rotear({
           texto: textoParaRotear,
@@ -438,8 +467,14 @@ export class Orquestrador {
         ? tentar('conhecimento', () => this.ia.respondedor.responder(a.textoBase || textoParaRotear, contexto.conhecimento))
         : Promise.resolve(null),
       lerReserva ? this.reservas.extrair(a.textoBase, this.reservas.contexto(contexto.cfg.fuso, contexto.reserva.ativa)) : Promise.resolve(undefined),
+      lerPedido
+        ? this.conversaPedidos.extrair(a.textoBase, this.conversaPedidos.contexto(contexto.cfg.fuso, contexto.pedidos.itens, contexto.pedidos.carrinho))
+        : Promise.resolve(undefined),
     ]);
     a.reserva = reserva;
+    a.pedido = pedido;
+    a.catalogo = contexto.pedidos.itens;
+    a.fluxoAtivo = contexto.reserva.ativa !== null || contexto.pedidos.carrinho !== null;
     // No meio de um atendimento, só quando o roteador vê um assunto novo ("qual a senha do Wi-Fi?"
     // enquanto a manutenção cuida da pia): "ok", "obrigado" e o próprio assunto não gastam a base.
     const assuntoNovo = !automacao && rot?.saida.assunto_novo && rot.confianca.assunto_novo >= contexto.cfg.limites.gatilho;
@@ -549,6 +584,8 @@ export class Orquestrador {
         // Pergunta ou pedido de outro assunto não é "setor errado": transferir tiraria do setor certo
         // o pedido que já está sendo atendido.
         if (gatilho === 'setor_errado' && novo) gatilho = null;
+        // No meio de um pedido ou de uma reserva, "só isso", "tchau" é fechar o pedido, não a conversa.
+        if (gatilho === 'quer_encerrar' && a.fluxoAtivo) gatilho = null;
         const decisaoId = rot ? await this.gravarDecisao(c, s, p.mensagemId, rot, gatilho) : null;
 
         if (gatilho) {
@@ -561,6 +598,10 @@ export class Orquestrador {
         // Reserva de hospedagem automática (VOA): pergunta o que falta, mostra opções, manda o link.
         if ((s.estado === 'automacao' || s.estado === 'resolvida') && a.reserva !== undefined) {
           if (await this.reservas.tratar(c, s, a.reserva, a.conhecimento, cfg.limites.respostaAutomatica, a.textoBase)) return;
+        }
+        // Pedido do catálogo conversando: perguntas, carrinho, total e confirmação.
+        if ((s.estado === 'automacao' || s.estado === 'resolvida') && a.pedido !== undefined) {
+          if (await this.conversaPedidos.tratar(c, s, a.pedido, a.catalogo ?? [], a.conhecimento, cfg.limites.respostaAutomatica, a.textoBase)) return;
         }
 
         // Aberto pelo menu: a primeira fala do hóspede vira o resumo que a equipe lê.

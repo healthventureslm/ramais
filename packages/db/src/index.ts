@@ -98,6 +98,20 @@ export async function resolverOfertaVoa(pool: pg.Pool, uuid: string) {
   return l ? { orgId: l.org_id, reservaId: l.reserva_id } : null;
 }
 
+/** Chat do hotel (QR público): o código diz o org e a unidade. */
+export async function resolverHotel(pool: pg.Pool, codigo: string) {
+  const r = await pool.query<{ org_id: string; unidade_id: string }>('SELECT * FROM sistema.resolver_hotel($1)', [codigo]);
+  const l = r.rows[0];
+  return l ? { orgId: l.org_id, unidadeId: l.unidade_id } : null;
+}
+
+/** Aviso do Salabim Pay: o id do link diz o org e a cobrança. */
+export async function resolverCobranca(pool: pg.Pool, linkId: string) {
+  const r = await pool.query<{ org_id: string; cobranca_id: string }>('SELECT * FROM sistema.resolver_cobranca($1)', [linkId]);
+  const l = r.rows[0];
+  return l ? { orgId: l.org_id, cobrancaId: l.cobranca_id } : null;
+}
+
 /** Sessão do chat do quarto: o hash do segredo do navegador diz o org e a sessão (se não expirou). */
 export async function resolverChat(pool: pg.Pool, tokenHash: string) {
   const r = await pool.query<{ org_id: string; sessao_id: string }>('SELECT * FROM sistema.resolver_chat($1)', [tokenHash]);

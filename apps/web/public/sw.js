@@ -9,8 +9,8 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
-// Chat do hóspede fica em /q/<código>; o resto é o app da equipe.
-const doHospede = (url) => new URL(url, self.location.origin).pathname.startsWith('/q/');
+// Chat do hóspede fica em /q/<código> (quarto) ou /h/<código> (hotel); o resto é o app da equipe.
+const doHospede = (url) => /^\/[qh]\//.test(new URL(url, self.location.origin).pathname);
 
 self.addEventListener('push', (e) => {
   let a;

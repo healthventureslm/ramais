@@ -182,6 +182,19 @@ O hóspede pede um quarto (ou mais noites) pelo WhatsApp ou pelo chat do quarto;
 - **Para a VOA:** a URL do webhook, `https://<dominio>/api/webhooks/voa`, e o valor de `VOA_WEBHOOK_SEGREDO`.
 - **Em cada hotel:** Administração → Reservas → ID do hotel na VOA → Ligar. O Ramais confere o ID com a VOA antes de gravar.
 - Se a VOA falhar, o hóspede é avisado e o pedido vai para a fila da recepção.
+- **Mais noites (no quarto):** "quero ficar mais 2 noites" cota as noites a mais (preço real da busca da VOA), pede "Confirma?" e manda o link do Salabim Pay. Pago, a extensão é confirmada e o check-out da lista de hóspedes e a sessão do chat do quarto passam para a nova data. A VOA ainda não tem a rota de extensão: a confirmação é **simulada**, no formato proposto em [voa-extensao.md](voa-extensao.md).
+
+## Pagamento por link (Salabim Pay)
+
+Pix ou cartão numa página do Salabim (checkout.voahoteis.com.br). Serve para o pedido do catálogo pago na hora ("Como prefere pagar? 1. Na conta do quarto 2. Agora"), para o consumo que a equipe cobra pelo botão **Enviar link de pagamento** no cartão do pedido, e para as noites a mais.
+
+- No **ramais-api**: `SALABIM_PAY_CHAVE` (`sk_test_…` no ambiente de testes, `sk_live_…` em produção). Opcionais: `SALABIM_PAY_URL`, `SALABIM_LINK_MINUTOS` (validade do link, padrão 60). Sem chave, tudo vai para a conta do quarto, como antes.
+- O Ramais confere sozinho se o link foi pago (a cada 15 s nos primeiros 10 min, depois a cada 2 min até vencer). Webhook opcional, só acelera: `https://<dominio>/api/webhooks/salabim` (eventos `charge.paid`, `charge.refunded`). O aviso não é confiado: o Ramais consulta o link no Salabim.
+- Testes: cartão `4111 1111 1111 1111` aprova; Pix com centavos `,02` fica pendente e depois paga (guia "Ambiente de testes" do Salabim).
+
+## Chat do hotel (QR público)
+
+Para quem ainda vai se hospedar: tira dúvidas pela base de conhecimento e faz a reserva pela VOA, sem quarto, sem Menu principal e sem catálogo. Cada visitante é uma conversa própria (guardada 30 dias no aparelho dele) e aparece para a equipe como "Visitante (chat do hotel)". O link e o QR ficam em **Administração → Quartos e QR → Chat do hotel** (`https://<dominio>/h/<código>`): QR na recepção, link no site, no Instagram e no Google.
 
 ## 5. WhatsApp (quando houver número)
 

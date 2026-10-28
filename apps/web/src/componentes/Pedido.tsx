@@ -1,6 +1,6 @@
 import { Badge, Button, Card, CardBody, CardHeader, Dialog, Textarea } from '@healthventureslm/design-system';
 import type { EstadoPedido, PedidoView } from '@ramais/contracts';
-import { Check, CheckCircle2, Receipt, XCircle } from 'lucide-react';
+import { Check, CheckCircle2, CreditCard, Receipt, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useEvento } from '../tempo-real';
@@ -49,16 +49,20 @@ export function SeloPedido({ pedido: p }: { pedido: Pick<PedidoView, 'estado' | 
 }
 
 export const emAberto = (p: Pick<PedidoView, 'estado'>) => p.estado === 'pendente' || p.estado === 'confirmado';
-const podeLancar = (p: PedidoView) => !p.lancadoEm && p.estado !== 'recusado' && p.estado !== 'cancelado' && p.totalCentavos !== 0;
+/** Pago por Pix ou cartão (ou com o link em aberto): não vai para a conta do quarto. */
+const pagoPorLink = (p: PedidoView) => p.pagamento?.estado === 'paga';
+const linkAtivo = (p: PedidoView) => p.pagamento?.estado === 'aguardando';
+const podeLancar = (p: PedidoView) => !p.lancadoEm && p.estado !== 'recusado' && p.estado !== 'cancelado' && p.totalCentavos !== 0 && !pagoPorLink(p) && !linkAtivo(p);
 
-type Acao = 'confirmar' | 'recusar' | 'lancar' | 'concluir';
+type Acao = 'confirmar' | 'recusar' | 'lancar' | 'concluir' | 'cobrar';
 
 /**
  * Cartão do pedido (room service) ou da reserva (spa, passeio, transfer, mesa) no topo da lateral
  * do atendimento. Só aparece quando o atendimento nasceu de um pedido do catálogo.
  */
 export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId: string; estado: string; aoMudar: () => void }) {
-  const [pedido, setPedido] = useState<PedidoView | null>(null);
+  // Um atendimento pode ter vários itens (pedido montado conversando): a equipe responde por todos.
+  const [itens, setItens] = useState<PedidoView[]>([]);
   const [ocupado, setOcupado] = useState<Acao | null>(null);
   const [recusando, setRecusando] = useState(false);
   const atual = useRef(solicitacaoId);
@@ -69,21 +73,24 @@ export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId
       .pedidoDoAtendimento(solicitacaoId)
       .then((r) => {
         // Resposta atrasada de outro atendimento não pinta este.
-        if (atual.current === solicitacaoId) setPedido(r.pedido);
+        if (atual.current === solicitacaoId) setItens(r.pedidos ?? (r.pedido ? [r.pedido] : []));
       })
       .catch(() => undefined);
   }, [solicitacaoId]);
 
-  useEffect(() => setPedido(null), [solicitacaoId]);
+  useEffect(() => setItens([]), [solicitacaoId]);
   // O estado do atendimento mudou (pegou, resolveu, encerrou): o do pedido pode ter mudado junto.
   useEffect(carregar, [carregar, estado]);
   useEvento('solicitacao:atualizada', (p) => {
     if (p.solicitacaoId === solicitacaoId) carregar();
   });
 
-  if (!pedido || pedido.solicitacaoId !== solicitacaoId) return null;
-  const p = pedido;
+  if (!itens.length || itens[0]!.solicitacaoId !== solicitacaoId) return null;
+  // O grupo se apresenta pelo item mais atrasado: algum pendente deixa o pedido pendente.
+  const p = itens.find((x) => x.estado === 'pendente') ?? itens.find((x) => x.estado === 'confirmado') ?? itens[0]!;
+  const varios = itens.length > 1;
   const agendamento = p.tipo === 'agendamento';
+  const totalGrupo = itens.reduce<number | null>((t, x) => (x.totalCentavos === null || x.estado === 'recusado' || x.estado === 'cancelado' ? t : (t ?? 0) + x.totalCentavos), null);
 
   async function agir(acao: Acao, fn: () => Promise<unknown>, ok: string) {
     setOcupado(acao);
@@ -101,8 +108,11 @@ export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId
     }
   }
 
-  const aberto = emAberto(p);
-  const lancar = podeLancar(p);
+  const aberto = itens.some(emAberto);
+  const lancar = itens.some(podeLancar);
+  // Link para o hóspede pagar agora (Pix ou cartão) o que ainda iria para a conta.
+  const cobrar = itens.some((x) => podeLancar(x) && (x.totalCentavos ?? 0) > 0);
+  const pagamento = itens.find((x) => x.pagamento)?.pagamento ?? null;
   const travado = ocupado !== null;
 
   return (
@@ -110,11 +120,29 @@ export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId
       <CardHeader title={agendamento ? 'Reserva' : 'Pedido'} subtitle={[p.setorNome, p.categoria].filter(Boolean).join(' · ') || undefined} action={<SeloPedido pedido={p} />} />
       <CardBody>
         <div className="pilha pilha--larga">
+          {varios && (
+            <ul className="pedido__itens">
+              {itens.map((x) => (
+                <li key={x.id}>
+                  <span>
+                    <span className="dado">{x.quantidade}×</span> {x.itemNome}
+                    {x.observacao && <span className="pequeno mudo"> · {x.observacao}</span>}
+                    {(x.estado === 'recusado' || x.estado === 'cancelado') && <span className="pequeno mudo"> · {SELO[x.estado].texto(x.tipo).toLowerCase()}</span>}
+                  </span>
+                  <span className="dado">{x.totalCentavos === null ? 'sem preço' : x.totalCentavos === 0 ? 'sem custo' : reais(x.totalCentavos)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <dl className="pares">
-            <dt>Item</dt>
-            <dd>{p.itemNome}</dd>
-            <dt>{agendamento ? 'Pessoas' : 'Quantidade'}</dt>
-            <dd className="dado">{quantidade(p)}</dd>
+            {!varios && (
+              <>
+                <dt>Item</dt>
+                <dd>{p.itemNome}</dd>
+                <dt>{agendamento ? 'Pessoas' : 'Quantidade'}</dt>
+                <dd className="dado">{quantidade(p)}</dd>
+              </>
+            )}
             {p.agendadoPara && (
               <>
                 <dt>Quando</dt>
@@ -130,27 +158,53 @@ export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId
                 <dd>há {desde(p.criadoEm)}</dd>
               </>
             )}
-            {p.observacao && (
+            {!varios && p.observacao && (
               <>
                 <dt>Observação</dt>
                 <dd>{p.observacao}</dd>
               </>
             )}
-            <dt>Preço</dt>
-            <dd className="dado">
-              {p.precoUnitCentavos === null ? <span className="mudo">sem preço no catálogo</span> : p.precoUnitCentavos === 0 ? 'sem custo' : `${reais(p.precoUnitCentavos)} cada`}
-            </dd>
-            {p.totalCentavos !== null && p.totalCentavos > 0 && (
+            {!varios && (
               <>
-                <dt>Total</dt>
-                <dd className="dado pedido__total">{reais(p.totalCentavos)}</dd>
+                <dt>Preço</dt>
+                <dd className="dado">
+                  {p.precoUnitCentavos === null ? <span className="mudo">sem preço no catálogo</span> : p.precoUnitCentavos === 0 ? 'sem custo' : `${reais(p.precoUnitCentavos)} cada`}
+                </dd>
               </>
             )}
-            {p.totalCentavos !== 0 && (
+            {totalGrupo !== null && totalGrupo > 0 && (
+              <>
+                <dt>Total</dt>
+                <dd className="dado pedido__total">{reais(totalGrupo)}</dd>
+              </>
+            )}
+            {pagamento && (
+              <>
+                <dt>Pagamento</dt>
+                <dd className="linha">
+                  {pagamento.estado === 'paga' ? (
+                    <Badge variant="positive">Pago por Pix ou cartão</Badge>
+                  ) : pagamento.estado === 'aguardando' ? (
+                    <>
+                      <Badge variant="warning">Aguardando pagamento</Badge>
+                      {pagamento.link && (
+                        <a className="pequeno" href={pagamento.link} target="_blank" rel="noreferrer">
+                          ver link
+                        </a>
+                      )}
+                    </>
+                  ) : (
+                    <Badge variant="neutral">{pagamento.estado === 'estornada' ? 'Estornado' : 'Link vencido'}</Badge>
+                  )}
+                  <span className="pequeno mudo dado">{reais(pagamento.valorCentavos)}</span>
+                </dd>
+              </>
+            )}
+            {totalGrupo !== 0 && !itens.every((x) => pagoPorLink(x) || linkAtivo(x) || x.estado === 'recusado' || x.estado === 'cancelado') && (
               <>
                 <dt>Conta</dt>
                 <dd className="linha">
-                  {p.lancadoEm ? (
+                  {itens.every((x) => x.lancadoEm || x.estado === 'recusado' || x.estado === 'cancelado') && p.lancadoEm ? (
                     <>
                       <Badge variant="positive" outline>
                         Lançado na conta
@@ -171,7 +225,7 @@ export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId
             )}
           </dl>
 
-          {(aberto || lancar) && (
+          {(aberto || lancar || cobrar) && (
             <div className="pilha">
               {p.estado === 'pendente' && (
                 <Button block iconLeft={<Check />} loading={ocupado === 'confirmar'} disabled={travado} onClick={() => agir('confirmar', () => api.confirmarPedido(p.id), agendamento ? 'Reserva confirmada. O hóspede foi avisado.' : 'Pedido confirmado. O hóspede foi avisado.')}>
@@ -193,6 +247,11 @@ export function CartaoPedido({ solicitacaoId, estado, aoMudar }: { solicitacaoId
               {lancar && (
                 <Button block variant="secondary" iconLeft={<Receipt />} loading={ocupado === 'lancar'} disabled={travado} onClick={() => agir('lancar', () => api.lancarPedido(p.id), 'Lançado na conta do quarto.')}>
                   Lançar na conta
+                </Button>
+              )}
+              {cobrar && (
+                <Button block variant="secondary" iconLeft={<CreditCard />} loading={ocupado === 'cobrar'} disabled={travado} onClick={() => agir('cobrar', () => api.cobrarPedido(p.id), 'Link de pagamento enviado ao hóspede.')}>
+                  Enviar link de pagamento
                 </Button>
               )}
               {aberto && (

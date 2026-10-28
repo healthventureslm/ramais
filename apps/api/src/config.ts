@@ -86,6 +86,15 @@ const Esquema = z.object({
   VOA_WEBHOOK_SEGREDO: vazioNulo,
   /** Validade do link de pagamento (a VOA usa 30 min se não pedirmos outra). */
   VOA_LINK_MINUTOS: z.coerce.number().int().min(15).max(10_080).default(120),
+
+  /**
+   * Links de pagamento do Salabim Pay (Pix ou cartão): pedido do catálogo pago na hora, consumo
+   * cobrado pela equipe e noites a mais na estadia. Chave sk_test_… cai no ambiente de testes.
+   * Sem chave, tudo vai para a conta do quarto.
+   */
+  SALABIM_PAY_URL: z.string().default('https://pay.salabim.ai/api/v1'),
+  SALABIM_PAY_CHAVE: vazioNulo,
+  SALABIM_LINK_MINUTOS: z.coerce.number().int().min(10).max(10_080).default(60),
 });
 
 export type Config = z.infer<typeof Esquema>;

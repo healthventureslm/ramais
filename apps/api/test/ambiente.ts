@@ -12,6 +12,8 @@ import { criarHotelDeTeste, SENHA } from './hotel-de-teste.js';
 carregarEnv();
 process.env.META_DRY_RUN = 'true';
 process.env.OPENROUTER_API_KEY = '';
+// Pagamento online desligado (sem chamar o Salabim de verdade); o teste de cobrança liga e simula.
+process.env.SALABIM_PAY_CHAVE = '';
 // Filas próprias: um worker de desenvolvimento rodando no mesmo banco não rouba os jobs do teste.
 process.env.PGBOSS_SCHEMA = 'pgboss_teste';
 

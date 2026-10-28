@@ -203,6 +203,8 @@ export interface Quarto {
 export type DestinoQr = 'whatsapp' | 'web';
 export interface DadosQuartos {
   numeroWhatsapp: string | null;
+  /** Chat do hotel (QR público): para quem ainda vai se hospedar. */
+  linkHotel: string | null;
   destino: DestinoQr;
   quartos: Quarto[];
 }
@@ -348,11 +350,12 @@ export const api = {
   // Pedidos do catálogo (room service, spa, passeios…)
   pedidos: (unidadeId: string, filtro: FiltroPedidos) =>
     chamar<{ hoje: string; pedidos: PedidoView[] }>('GET', `/pedidos?unidadeId=${unidadeId}&filtro=${filtro}`),
-  pedidoDoAtendimento: (solicitacaoId: string) => chamar<{ pedido: PedidoView | null }>('GET', `/pedidos/solicitacao/${solicitacaoId}`),
+  pedidoDoAtendimento: (solicitacaoId: string) => chamar<{ pedido: PedidoView | null; pedidos: PedidoView[] }>('GET', `/pedidos/solicitacao/${solicitacaoId}`),
   confirmarPedido: (id: string) => chamar('POST', `/pedidos/${id}/confirmar`),
   recusarPedido: (id: string, motivo: string) => chamar('POST', `/pedidos/${id}/recusar`, { motivo }),
   lancarPedido: (id: string) => chamar('POST', `/pedidos/${id}/lancar`),
   concluirPedido: (id: string) => chamar('POST', `/pedidos/${id}/concluir`),
+  cobrarPedido: (id: string) => chamar<{ ok: boolean; link: string | null }>('POST', `/pedidos/${id}/cobrar`),
 
   admin: {
     pessoas: (unidadeId: string) => chamar<PessoaEquipe[]>('GET', `/admin/pessoas?unidadeId=${unidadeId}`),

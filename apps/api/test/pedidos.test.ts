@@ -83,7 +83,7 @@ describe.skipIf(!temBanco)('catálogo e pedidos', () => {
     expect(['na_fila', 'oferecida']).toContain(s.estado);
     expect(sp(s.resumo)).toBe('Pedido: 2× Club sandwich · total R$ 96,00');
     const nota = await A.consulta(`SELECT texto FROM mensagem WHERE solicitacao_id = $1 AND visibilidade = 'interna'`, [s.id]);
-    expect(nota[0].texto).toContain('Observação: sem cebola');
+    expect(nota[0].texto).toContain('observação: sem cebola');
     await A.esperar(async () => (await textosDoChat()).some((t) => t.startsWith('Recebemos seu pedido: 2× Club sandwich. Total: R$ 96,00')));
 
     // A equipe confirma (e fica com o atendimento), lança na conta e conclui.

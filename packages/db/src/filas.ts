@@ -32,4 +32,6 @@ export type DadosTemporizador =
   | { tipo: 'inatividade_encerra'; orgId: string; solicitacaoId: string; versao: number }
   | { tipo: 'espera_longa'; orgId: string; solicitacaoId: string; versao: number }
   /** Olhar a escada de escalonamento da solicitação (idempotente: o que já foi feito não repete). */
-  | { tipo: 'escada'; orgId: string; solicitacaoId: string };
+  | { tipo: 'escada'; orgId: string; solicitacaoId: string }
+  /** Conferir no provedor se o link de pagamento foi pago (repete até pagar ou vencer). */
+  | { tipo: 'cobranca'; orgId: string; cobrancaId: string; tentativa: number };

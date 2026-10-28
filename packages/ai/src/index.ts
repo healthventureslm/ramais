@@ -9,6 +9,7 @@ import { ClienteOpenRouter, type ClienteChat, type ClienteDecisoes, type UsoIA }
 import { Roteador } from './roteador.js';
 import { TradutorLLM, TradutorNulo, type Tradutor, TradutorEmCadeia } from './tradutor.js';
 import { ExtratorReservaLLM, ExtratorReservaNulo, type ExtratorReserva } from './reserva.js';
+import { ExtratorPedidoLLM, ExtratorPedidoNulo, type ExtratorPedido } from './pedidos.js';
 
 export * from './openrouter.js';
 export * from './motor-llm.js';
@@ -21,6 +22,7 @@ export * from './conhecimento.js';
 export * from './midia.js';
 export * from './idioma.js';
 export * from './reserva.js';
+export * from './pedidos.js';
 
 export interface ConfigIA {
   apiKey?: string | null;
@@ -48,6 +50,8 @@ export interface ServicosIA {
   multimodal: Multimodal;
   /** Reserva de hospedagem pela conversa (datas, pessoas, escolha, titular). */
   reserva: ExtratorReserva;
+  /** Pedido do catálogo pela conversa (perguntas, itens, carrinho). */
+  pedido: ExtratorPedido;
   comIA: boolean;
 }
 
@@ -64,6 +68,7 @@ export function criarServicosIA(c: ConfigIA): ServicosIA {
       respondedor: new RespondedorPalavras(),
       multimodal: new MultimodalNulo(),
       reserva: new ExtratorReservaNulo(),
+      pedido: new ExtratorPedidoNulo(),
       comIA: false,
     };
   }
@@ -88,6 +93,7 @@ export function criarServicosIA(c: ConfigIA): ServicosIA {
     respondedor: new RespondedorLLM(cliente, c.modeloResposta),
     multimodal: new MultimodalLLM(cliente, c.modeloMultimodal),
     reserva: new ExtratorReservaLLM(cliente, c.modeloResposta),
+    pedido: new ExtratorPedidoLLM(cliente, c.modeloResposta),
     comIA: true,
   };
 }

@@ -1,5 +1,5 @@
 import { ActionSheet, Banner, Button, EmptyState, HVProvider, IconButton, Textarea } from '@healthventureslm/design-system';
-import type { CatalogoItemView, ChatView, PedidoView } from '@ramais/contracts';
+import type { CatalogoItemView, ChatView, ContaHospedeView, PedidoView } from '@ramais/contracts';
 import {
   AlertCircle,
   BedDouble,
@@ -20,13 +20,14 @@ import {
   SendHorizontal,
   ShoppingBag,
   UtensilsCrossed,
+  Wallet,
   Wrench,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { API } from '../api';
 import { Avisos, avisar } from '../componentes/Avisos';
 import { MidiaMensagem, TEXTOS_MIDIA, useAnexos, type ArquivoPronto, type TextosMidia } from '../componentes/Midia';
-import { CatalogoHospede, MeusPedidos, type ApiCatalogo } from '../componentes/CatalogoHospede';
+import { CatalogoHospede, MeusPedidos, MinhaConta, type ApiCatalogo } from '../componentes/CatalogoHospede';
 import { ativarChat, estadoNotificacao, type EstadoNotificacao } from '../notificacoes';
 import { hora } from '../util';
 
@@ -45,6 +46,10 @@ const TEXTOS = {
     equipe: 'Equipe do hotel',
     qrInvalido: 'Este QR não está mais ativo.',
     qrInvalidoDica: 'Peça ajuda à recepção ou use o QR atual do quarto.',
+    tituloHotel: 'Reservas e dúvidas',
+    boasVindasHotel: 'Pergunte o que quiser sobre o hotel ou faça a sua reserva: diga as datas e quantas pessoas.',
+    privadoHotel: 'Só você vê esta conversa, neste aparelho.',
+    qrInvalidoHotelDica: 'Procure o hotel pelos canais oficiais.',
     semConexao: 'Sem conexão com o hotel. Tentando de novo…',
     quarto: 'Quarto',
     destino: 'para a equipe do hotel',
@@ -86,6 +91,19 @@ const TEXTOS = {
     estadoConcluido: 'Concluído',
     cancelarPedido: 'Cancelar',
     nenhumPedido: 'Você ainda não fez pedidos nesta estadia.',
+    pago: 'Pago',
+    pagar: 'Pagar',
+    minhaConta: 'Minha conta',
+    minhaContaDica: 'O que já foi pago e o que está em aberto',
+    contaEmAberto: 'Em aberto',
+    situacaoAguardando: 'Aguardando pagamento',
+    situacaoNaConta: 'Na conta do quarto',
+    pagarAgora: 'Pagar agora',
+    contaVazia: 'Nada pedido por aqui nesta estadia.',
+    contaRodape: 'Aqui aparecem os pedidos e serviços feitos por este chat. Diárias e outros consumos estão na conta do hotel, na recepção. O que está na conta do quarto é pago no check-out.',
+    noiteAMais: 'noite a mais',
+    noitesAMais: 'noites a mais',
+    linkAberto: 'Link de pagamento aberto. Também mandamos aqui no chat.',
     menos: 'Diminuir',
     mais: 'Aumentar',
     pedidoEnviado: 'Pedido enviado. Avisamos aqui quando for confirmado.',
@@ -106,6 +124,10 @@ const TEXTOS = {
     equipe: 'Hotel team',
     qrInvalido: 'This QR code is no longer active.',
     qrInvalidoDica: 'Please ask the front desk, or use the current QR code in your room.',
+    tituloHotel: 'Bookings and questions',
+    boasVindasHotel: 'Ask anything about the hotel or book your stay: tell us the dates and how many people.',
+    privadoHotel: 'Only you can see this conversation, on this device.',
+    qrInvalidoHotelDica: 'Please contact the hotel through its official channels.',
     semConexao: 'No connection to the hotel. Retrying…',
     quarto: 'Room',
     destino: 'to the hotel team',
@@ -147,6 +169,19 @@ const TEXTOS = {
     estadoConcluido: 'Done',
     cancelarPedido: 'Cancel',
     nenhumPedido: 'You have not ordered anything during this stay.',
+    pago: 'Paid',
+    pagar: 'Pay',
+    minhaConta: 'My bill',
+    minhaContaDica: 'What is paid and what is still open',
+    contaEmAberto: 'Open',
+    situacaoAguardando: 'Awaiting payment',
+    situacaoNaConta: 'Charged to the room',
+    pagarAgora: 'Pay now',
+    contaVazia: 'Nothing ordered here during this stay.',
+    contaRodape: 'This shows what you ordered through this chat. Room rates and other charges are on the hotel bill at the front desk. Room charges are paid at check-out.',
+    noiteAMais: 'extra night',
+    noitesAMais: 'extra nights',
+    linkAberto: 'Payment link opened. We also sent it here in the chat.',
     menos: 'Decrease',
     mais: 'Increase',
     pedidoEnviado: 'Order sent. We will let you know here when it is confirmed.',
@@ -187,6 +222,10 @@ const TEXTOS = {
     equipe: 'Equipo del hotel',
     qrInvalido: 'Este código QR ya no está activo.',
     qrInvalidoDica: 'Pida ayuda en recepción o use el QR actual de la habitación.',
+    tituloHotel: 'Reservas y dudas',
+    boasVindasHotel: 'Pregunte lo que quiera sobre el hotel o haga su reserva: díganos las fechas y cuántas personas.',
+    privadoHotel: 'Solo usted ve esta conversación, en este dispositivo.',
+    qrInvalidoHotelDica: 'Contacte al hotel por sus canales oficiales.',
     semConexao: 'Sin conexión con el hotel. Reintentando…',
     quarto: 'Habitación',
     destino: 'al equipo del hotel',
@@ -228,6 +267,19 @@ const TEXTOS = {
     estadoConcluido: 'Concluido',
     cancelarPedido: 'Cancelar',
     nenhumPedido: 'Aún no hizo pedidos en esta estadía.',
+    pago: 'Pagado',
+    pagar: 'Pagar',
+    minhaConta: 'Mi cuenta',
+    minhaContaDica: 'Lo que ya está pagado y lo que está pendiente',
+    contaEmAberto: 'Pendiente',
+    situacaoAguardando: 'Esperando el pago',
+    situacaoNaConta: 'En la cuenta de la habitación',
+    pagarAgora: 'Pagar ahora',
+    contaVazia: 'Nada pedido por aquí en esta estadía.',
+    contaRodape: 'Aquí aparecen los pedidos y servicios hechos por este chat. Las tarifas y otros consumos están en la cuenta del hotel, en recepción. Lo que está en la cuenta de la habitación se paga en el check-out.',
+    noiteAMais: 'noche más',
+    noitesAMais: 'noches más',
+    linkAberto: 'Enlace de pago abierto. También lo enviamos aquí en el chat.',
     menos: 'Disminuir',
     mais: 'Aumentar',
     pedidoEnviado: 'Pedido enviado. Le avisamos aquí cuando se confirme.',
@@ -397,8 +449,11 @@ interface Pendente {
 /**
  * Chat do quarto, aberto pelo QR: o hóspede escreve, manda foto ou áudio, e a equipe responde
  * aqui, como no WhatsApp. Não precisa de conta nem de app. A conversa é a da estadia atual.
+ * Modo "hotel": o QR (ou link no site) do hotel, para quem ainda vai se hospedar: dúvidas e
+ * reserva com a IA, sem quarto, sem Menu principal e sem catálogo.
  */
-export function ChatQuarto({ codigo }: { codigo: string }) {
+export function ChatQuarto({ codigo, modo = 'quarto' }: { codigo: string; modo?: 'quarto' | 'hotel' }) {
+  const hotel = modo === 'hotel';
   // Começa no idioma do celular; quando o hóspede escreve, a tela passa para o idioma da conversa
   // (celular em inglês, conversa em português: tela em português).
   const [idioma, setIdioma] = useState(idiomaDoNavegador);
@@ -422,7 +477,7 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
   /** Abre a sessão pelo QR (primeira vez, ou depois que a anterior venceu). */
   const abrirSessao = useCallback(async () => {
     try {
-      const s = await chamar<{ token: string }>('POST', '/chat/sessao', null, { codigo, idioma: navigator.language });
+      const s = await chamar<{ token: string }>('POST', hotel ? '/chat/hotel' : '/chat/sessao', null, { codigo, idioma: navigator.language });
       token.current = s.token;
       salvarToken(codigo, s.token);
       return true;
@@ -430,7 +485,7 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
       if (e instanceof ErroChat && e.status === 404) setInvalido(true);
       return false;
     }
-  }, [codigo]);
+  }, [codigo, hotel]);
 
   /** Toda chamada com a sessão: se ela venceu (check-out, QR novo), abre outra e tenta uma vez. */
   const comSessao = useCallback(
@@ -525,6 +580,7 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
   // Catálogo do hotel (pedir ou reservar) e os pedidos da estadia.
   const [catalogoAberto, setCatalogoAberto] = useState(false);
   const [pedidosAbertos, setPedidosAbertos] = useState(false);
+  const [contaAberta, setContaAberta] = useState(false);
   const apiCatalogo: ApiCatalogo = {
     catalogo: () => comSessao((tk) => chamar<{ itens: CatalogoItemView[]; hoje: string }>('GET', '/chat/catalogo', tk)),
     horarios: (id, data, pessoas) =>
@@ -532,6 +588,8 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
     pedir: (b) => comSessao((tk) => chamar<PedidoView>('POST', '/chat/pedidos', tk, b)),
     pedidos: () => comSessao((tk) => chamar<{ pedidos: PedidoView[] }>('GET', '/chat/pedidos', tk)),
     cancelar: (id) => comSessao((tk) => chamar('POST', `/chat/pedidos/${id}/cancelar`, tk)),
+    conta: () => comSessao((tk) => chamar<ContaHospedeView>('GET', '/chat/conta', tk)),
+    pagarConta: () => comSessao((tk) => chamar<{ link: string | null; valorCentavos: number }>('POST', '/chat/conta/pagar', tk)),
   };
   async function escolherSetor(chave: string) {
     setMenuAberto(false);
@@ -587,7 +645,7 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
     return (
       <HVProvider>
         <main className="zap zap--vazio">
-          <EmptyState align="center" icon={<ConciergeBell />} title={t.qrInvalido} description={t.qrInvalidoDica} />
+          <EmptyState align="center" icon={<ConciergeBell />} title={t.qrInvalido} description={hotel ? t.qrInvalidoHotelDica : t.qrInvalidoDica} />
         </main>
       </HVProvider>
     );
@@ -605,7 +663,7 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
           </span>
           <div className="zap__quem">
             <strong>{dados?.hotel ?? t.titulo}</strong>
-            <span>{dados ? `${t.quarto} ${dados.quarto} · ${t.titulo}` : ''}</span>
+            <span>{dados ? (dados.quarto ? `${t.quarto} ${dados.quarto} · ${t.titulo}` : t.tituloHotel) : ''}</span>
           </div>
         </header>
         {dados && dados.setores.length > 0 && (
@@ -646,6 +704,21 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
                   },
                 ]
               : []),
+            // A conta da estadia: o que foi pedido por aqui, pago ou em aberto (só no chat do quarto).
+            ...(dados?.quarto
+              ? [
+                  {
+                    id: 'minha-conta',
+                    label: t.minhaConta,
+                    description: t.minhaContaDica,
+                    icon: <Wallet />,
+                    onSelect: () => {
+                      setMenuAberto(false);
+                      setContaAberta(true);
+                    },
+                  },
+                ]
+              : []),
             ...(dados?.setores ?? []).map((s) => {
               const Icone = ICONE_SETOR[s.chave] ?? MessagesSquare;
               return {
@@ -679,6 +752,18 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
           t={t}
           aoErro={(msg) => avisar(msg, 'error')}
         />
+        <MinhaConta
+          aberto={contaAberta}
+          aoFechar={() => setContaAberta(false)}
+          api={apiCatalogo}
+          idioma={idioma}
+          t={t}
+          aoErro={(msg) => avisar(msg, 'error')}
+          aoPagar={() => {
+            avisar(t.linkAberto, 'success');
+            void carregar();
+          }}
+        />
         {offline && <Banner variant="warning" title={t.semConexao} />}
         {notificacao === 'pendente' && escreveu && (
           <div className="zap__notificar">
@@ -696,7 +781,13 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
         <div className="zap__parede" aria-live="polite">
           <p className="zap__aviso">
             <Lock aria-hidden="true" />
-            {itens.length === 0 ? `${t.boasVindas} ${t.privado}` : t.privado}
+            {hotel
+              ? itens.length === 0
+                ? `${t.boasVindasHotel} ${t.privadoHotel}`
+                : t.privadoHotel
+              : itens.length === 0
+                ? `${t.boasVindas} ${t.privado}`
+                : t.privado}
           </p>
           {itens.map((m, i) => {
             const antes = itens[i - 1];
