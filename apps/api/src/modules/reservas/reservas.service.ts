@@ -761,11 +761,11 @@ export class Reservas implements OnModuleInit {
     return ex;
   }
 
-  /** Nome que já conhecemos (perfil do WhatsApp); "Quarto 302" não serve. */
+  /** Nome que já conhecemos (perfil do WhatsApp); "Quarto 302" e "Visitante (chat do hotel)" são nomes nossos, não servem. */
   private async nomeConhecido(c: Ctx, s: SolicitacaoRow): Promise<string | null> {
     const r = await c.tx.client.query<{ nome: string | null }>('SELECT nome FROM solicitante WHERE id = $1', [s.solicitante_id]);
     const nome = r.rows[0]?.nome?.trim();
-    return nome && !/^quarto /i.test(nome) && nome.split(/\s+/).length >= 2 ? nome : null;
+    return nome && !/^(quarto|visitante)\b/i.test(nome) && nome.split(/\s+/).length >= 2 ? nome : null;
   }
 
   /** A IA fala com o hóspede em português; a saída traduz para o idioma dele. */
