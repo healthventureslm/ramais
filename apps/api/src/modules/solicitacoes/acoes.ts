@@ -3,7 +3,7 @@ import { sala, type ChaveTexto, type ConfigUnidade, type ConteudoTexto, type Urg
 import {
   acaoParaEncerrarPeloSolicitante,
   avaliarCondicoes,
-  idiomaDosTextos,
+  idiomaDoOriginal,
   nomeSetor,
   podeTransicionar,
   proximaEspera,
@@ -24,6 +24,9 @@ const COLUNAS_ATUALIZAVEIS = new Set([
 ]);
 
 const instante = (d: Date | null | undefined) => (d ? new Date(d).getTime() : null);
+
+/** Variáveis de um texto fixo: as mesmas em todo idioma, ou por idioma (nome do setor traduzido). */
+type Vars = Record<string, string | number> | ((idioma: 'pt' | 'es' | 'en') => Record<string, string | number>);
 
 /**
  * Ações sobre uma solicitação, usadas pela api e pelo worker. Toda mudança de estado
@@ -148,11 +151,15 @@ export class Acoes {
 
   // ---------- Mensagens ----------
 
-  /** Mensagem para o solicitante. Sai pela fila de envio (tradução e janela de 24 h lá). */
+  /**
+   * Mensagem para o solicitante. Sai pela fila de envio (tradução e janela de 24 h lá).
+   * `traducaoPronta`: a versão no idioma dele já escrita (texto fixo em ES/EN); a saída usa esta
+   * em vez de traduzir, e a equipe lê o original.
+   */
   async enviarAoSolicitante(
     c: Ctx,
     s: SolicitacaoRow,
-    m: { texto: string; idioma: string; autor: Ator },
+    m: { texto: string; idioma: string; autor: Ator; traducaoPronta?: { idioma: string; texto: string } },
   ): Promise<string> {
     if (s.origem !== 'externa') throw new ConflictException('pedido interno não tem solicitante');
     const r = await c.tx.client.query<{ id: string }>(
@@ -161,6 +168,12 @@ export class Acoes {
       [c.tx.orgId, s.id, atorTipo(m.autor), m.autor.tipo === 'pessoa' ? m.autor.id : null, m.texto, m.idioma],
     );
     const id = r.rows[0]!.id;
+    if (m.traducaoPronta && m.traducaoPronta.idioma !== m.idioma) {
+      await c.tx.client.query(
+        `INSERT INTO mensagem_derivado (org_id, mensagem_id, tipo, idioma, texto, modelo) VALUES ($1, $2, 'traducao', $3, $4, 'texto-fixo')`,
+        [c.tx.orgId, id, m.traducaoPronta.idioma, m.traducaoPronta.texto],
+      );
+    }
     await this.nucleo.enfileirar(c, 'mensagem-saida', { orgId: c.tx.orgId, mensagemId: id });
     c.ef.depois(() =>
       this.nucleo.tempoReal.emitir(this.salas(s), 'solicitacao:mensagem', { solicitacaoId: s.id, mensagemId: id }),
@@ -190,29 +203,45 @@ export class Acoes {
     return m.id;
   }
 
-  /** Texto fixo da configuração, no idioma do solicitante (fora de PT/ES/EN: inglês). */
-  async enviarTextoFixo(c: Ctx, s: SolicitacaoRow, chave: ChaveTexto, vars: Record<string, string | number> = {}) {
+  /**
+   * Texto fixo da configuração. O original é sempre o português (é o que a equipe lê); em ES/EN
+   * vai junto a versão já escrita, e nos outros idiomas a saída traduz do português.
+   */
+  async enviarTextoFixo(c: Ctx, s: SolicitacaoRow, chave: ChaveTexto, vars: Vars = {}) {
     const cfg = await this.config(c, s);
+    const i = idiomaDoOriginal(s.idioma);
+    const em = (idioma: 'pt' | 'es' | 'en') => texto(cfg, chave, idioma, typeof vars === 'function' ? vars(idioma) : vars);
     return this.enviarAoSolicitante(c, s, {
-      texto: texto(cfg, chave, s.idioma, vars),
-      idioma: idiomaDosTextos(s.idioma),
+      texto: em('pt'),
+      idioma: 'pt',
       autor: { tipo: 'sistema' },
+      ...(i !== 'pt' ? { traducaoPronta: { idioma: i, texto: em(i) } } : {}),
     });
   }
 
   /** "Seu pedido foi encaminhado para X", com o nome do setor no idioma do hóspede. */
   async enviarEncaminhado(c: Ctx, s: SolicitacaoRow, setor: { chave: string; nome: string }) {
     const cfg = await this.config(c, s);
-    return this.enviarTextoFixo(c, s, 'encaminhado', { setor: nomeSetor(cfg, setor.chave, s.idioma, setor.nome) });
+    return this.enviarTextoFixo(c, s, 'encaminhado', (i) => ({ setor: nomeSetor(cfg, setor.chave, i, setor.nome) }));
   }
 
   /** Conteúdo de um bloco do fluxo: texto fixo da configuração ou texto livre em 3 idiomas. */
-  async enviarConteudo(c: Ctx, s: SolicitacaoRow, conteudo: ConteudoTexto, vars: Record<string, string | number> = {}) {
+  async enviarConteudo(c: Ctx, s: SolicitacaoRow, conteudo: ConteudoTexto, vars: Vars = {}) {
     if (conteudo.tipo === 'fixo') return this.enviarTextoFixo(c, s, conteudo.chave as ChaveTexto, vars);
-    const i = idiomaDosTextos(s.idioma);
-    const modelo = conteudo.texto[i] || conteudo.texto.en || conteudo.texto.pt;
-    const t = modelo.replace(/\{(\w+)\}/g, (_, nome: string) => String(vars[nome] ?? `{${nome}}`));
-    return this.enviarAoSolicitante(c, s, { texto: t, idioma: i, autor: { tipo: 'sistema' } });
+    const i = idiomaDoOriginal(s.idioma);
+    const em = (idioma: 'pt' | 'es' | 'en') => {
+      const v = typeof vars === 'function' ? vars(idioma) : vars;
+      const modelo = conteudo.texto[idioma] || conteudo.texto.pt || conteudo.texto.en;
+      return modelo.replace(/\{(\w+)\}/g, (_, nome: string) => String(v[nome] ?? `{${nome}}`));
+    };
+    // Sem texto em português no bloco, o original fica no idioma do hóspede (e a equipe lê esse).
+    const original = conteudo.texto.pt ? 'pt' : i;
+    return this.enviarAoSolicitante(c, s, {
+      texto: em(original),
+      idioma: original,
+      autor: { tipo: 'sistema' },
+      ...(i !== original ? { traducaoPronta: { idioma: i, texto: em(i) } } : {}),
+    });
   }
 
   /**

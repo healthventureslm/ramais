@@ -1,8 +1,11 @@
 import type {
   ArquivoMidia,
+  CatalogoItemReq,
+  CatalogoItemView,
   ConfigUnidade,
   DashboardView,
   PedidoApoioReq,
+  PedidoView,
   Sessao,
   SolicitacaoDetalhe,
   SolicitacaoResumo,
@@ -272,6 +275,26 @@ export interface Relatorio {
   };
 }
 
+export type { CatalogoItemReq, CatalogoItemView, PedidoView };
+
+/** Item do catálogo na tela de administração (com o uso dos últimos 30 dias). */
+export interface CatalogoItemAdmin extends CatalogoItemView {
+  pedidos30d: number;
+}
+
+export type FiltroPedidos = 'abertos' | 'agenda' | 'todos';
+
+/** Reserva de hospedagem automática pela VOA, por unidade. */
+export interface ConfigReservas {
+  voaHotelId: number | null;
+  /** Token da VOA configurado no servidor. */
+  integracao: boolean;
+  /** Segredo do webhook configurado (sem ele, o pagamento não é confirmado no Ramais). */
+  webhook: boolean;
+  urlWebhook: string | null;
+  ultimos30d: { estado: string; quantidade: number; total: number }[];
+}
+
 export const api = {
   login: (email: string, senha: string) => chamar<Sessao>('POST', '/auth/login', { email, senha }),
   eu: () => chamar<Eu>('GET', '/auth/eu'),
@@ -322,8 +345,22 @@ export const api = {
     }),
   ciente: (mensagemId: string) => chamar('POST', `/diretas/mensagens/${mensagemId}/ciente`),
 
+  // Pedidos do catálogo (room service, spa, passeios…)
+  pedidos: (unidadeId: string, filtro: FiltroPedidos) =>
+    chamar<{ hoje: string; pedidos: PedidoView[] }>('GET', `/pedidos?unidadeId=${unidadeId}&filtro=${filtro}`),
+  pedidoDoAtendimento: (solicitacaoId: string) => chamar<{ pedido: PedidoView | null }>('GET', `/pedidos/solicitacao/${solicitacaoId}`),
+  confirmarPedido: (id: string) => chamar('POST', `/pedidos/${id}/confirmar`),
+  recusarPedido: (id: string, motivo: string) => chamar('POST', `/pedidos/${id}/recusar`, { motivo }),
+  lancarPedido: (id: string) => chamar('POST', `/pedidos/${id}/lancar`),
+  concluirPedido: (id: string) => chamar('POST', `/pedidos/${id}/concluir`),
+
   admin: {
     pessoas: (unidadeId: string) => chamar<PessoaEquipe[]>('GET', `/admin/pessoas?unidadeId=${unidadeId}`),
+    catalogo: (unidadeId: string) => chamar<CatalogoItemAdmin[]>('GET', `/admin/catalogo?unidadeId=${unidadeId}`),
+    reservas: (unidadeId: string) => chamar<ConfigReservas>('GET', `/admin/reservas?unidadeId=${unidadeId}`),
+    salvarReservas: (unidadeId: string, voaHotelId: number | null) => chamar<{ ok: boolean; hotel: string | null }>('PUT', '/admin/reservas', { unidadeId, voaHotelId }),
+    criarItem: (unidadeId: string, b: CatalogoItemReq) => chamar<{ id: string }>('POST', '/admin/catalogo', { ...b, unidadeId }),
+    salvarItem: (id: string, b: CatalogoItemReq) => chamar('PUT', `/admin/catalogo/${id}`, b),
     criarPessoa: (b: PessoaForm & { email: string }) => chamar<Credenciais & { id: string }>('POST', '/admin/pessoas', b),
     salvarPessoa: (id: string, b: PessoaForm & { ativo: boolean }) => chamar('PUT', `/admin/pessoas/${id}`, b),
     redefinir: (id: string, b: { senha: boolean; pin: boolean }) => chamar<Credenciais>('POST', `/admin/pessoas/${id}/redefinir`, b),

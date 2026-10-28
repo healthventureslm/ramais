@@ -33,6 +33,8 @@ export interface PedidoChat {
   logprobs?: boolean;
   topLogprobs?: number;
   timeoutMs?: number;
+  /** Modelos que raciocinam antes de responder: quanto. "minimal" para extração simples (o raciocínio come os tokens da resposta). */
+  raciocinio?: 'minimal' | 'low' | 'medium';
 }
 
 export interface RespostaChat {
@@ -115,6 +117,7 @@ export class ClienteOpenRouter implements ClienteChat, ClienteDecisoes {
         json_schema: { name: p.esquema.nome, strict: true, schema: p.esquema.schema },
       };
     }
+    if (p.raciocinio) corpo.reasoning = { effort: p.raciocinio, exclude: true };
     if (p.logprobs) {
       corpo.logprobs = true;
       corpo.top_logprobs = p.topLogprobs ?? 5;

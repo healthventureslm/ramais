@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { api, type LocalBusca, type Setor } from '../api';
 import { desde, ESTADO, supervisiona } from '../util';
 import { avisar } from './Avisos';
+import { CartaoPedido } from './Pedido';
 import { Chaveiro, Estado, situacao } from './ui';
 
 /** Detalhes e ações do atendimento, em cartões do DS. Coluna à direita no computador, gaveta no celular. */
@@ -45,6 +46,7 @@ export function Lateral({
 
   return (
     <>
+      <CartaoPedido solicitacaoId={d.id} estado={d.estado} aoMudar={aoMudar} />
       {d.triagem && (
         <Triagem
           detalhe={d}

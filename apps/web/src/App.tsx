@@ -1,6 +1,6 @@
 import { ActionSheet, Banner, Button, EmptyState, HVProvider, NavBar, Spinner, TabBar, TopNav, useConfirm, useViewport } from '@healthventureslm/design-system';
 import type { Sessao } from '@ramais/contracts';
-import { BarChart3, Bell, Calculator, Inbox, LayoutDashboard, Menu as IconeMenu, MessagesSquare, Radio, Settings2, Workflow } from 'lucide-react';
+import { BarChart3, Bell, Calculator, Inbox, LayoutDashboard, Menu as IconeMenu, MessagesSquare, Radio, Settings2, ShoppingBag, Workflow } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { aparenciaSalva, NOMES_APARENCIA, salvarAparencia, type Aparencia } from './aparencia';
 import { api, quandoExpirar, salvarSessao, sessaoSalva, type Eu } from './api';
@@ -13,6 +13,7 @@ import { Atendimentos } from './telas/Atendimentos';
 import { Diretas } from './telas/Diretas';
 import { Login } from './telas/Login';
 import { Painel } from './telas/Painel';
+import { Pedidos } from './telas/Pedidos';
 
 // Editor da jornada e administração só para admin, dashboard para gerência e admin: carregam sob demanda
 // (o celular da equipe baixa menos).
@@ -21,7 +22,10 @@ const Dashboard = lazy(() => import('./telas/Dashboard').then((m) => ({ default:
 const Jornada = lazy(() => import('./telas/Jornada').then((m) => ({ default: m.Jornada })));
 const Simulacao = lazy(() => import('./telas/Simulacao').then((m) => ({ default: m.Simulacao })));
 
-type Tela = 'atendimentos' | 'painel' | 'diretas' | 'relatorio' | 'simulacao' | 'admin' | 'jornada';
+type Tela = 'atendimentos' | 'painel' | 'diretas' | 'pedidos' | 'relatorio' | 'simulacao' | 'admin' | 'jornada';
+
+/** Telas de uso eventual da gestão: no computador, ficam no menu da conta (a barra do topo comporta ~6 destinos). */
+const NO_MENU_DA_CONTA: Tela[] = ['jornada', 'simulacao'];
 
 /** "Agora não" no convite para ativar as notificações: volta a perguntar depois de uma semana. */
 const CHAVE_ADIADO = 'ramais.notificacoes.adiado';
@@ -255,6 +259,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
     atendimentos: <Inbox />,
     painel: <LayoutDashboard />,
     diretas: <MessagesSquare />,
+    pedidos: <ShoppingBag />,
     relatorio: <BarChart3 />,
     simulacao: <Calculator />,
     jornada: <Workflow />,
@@ -264,6 +269,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
     { id: 'atendimentos', nome: 'Atendimentos' },
     { id: 'painel', nome: 'Painel' },
     { id: 'diretas', nome: 'Mensagens' },
+    { id: 'pedidos', nome: 'Pedidos' },
     // Gerência e administração veem o dashboard; só a administração configura.
     ...(sessao.pessoa.admin || sessao.pessoa.gerente
       ? [
@@ -285,7 +291,10 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
       {!isMobile ? (
         <TopNav
           brand={{ title: 'Ramais', markSrc: null }}
-          items={telas.map((t) => ({ id: t.id, label: t.nome, icon: icones[t.id], badge: t.id === 'diretas' && diretasNovas > 0 }))}
+          // A barra comporta ~6 destinos; Jornada e Simulação (uso eventual da gestão) ficam no menu da conta.
+          items={telas
+            .filter((t) => !NO_MENU_DA_CONTA.includes(t.id))
+            .map((t) => ({ id: t.id, label: t.nome, icon: icones[t.id], badge: t.id === 'diretas' && diretasNovas > 0 }))}
           activeId={tela}
           onSelect={(id) => ir(id as Tela)}
           user={{ name: sessao.pessoa.nome, role: `${unidadeNome} · ${emTurno ? 'no turno' : 'fora do turno'}` }}
@@ -295,6 +304,14 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
               ? [
                   { type: 'heading' as const, label: 'Unidade' },
                   ...unidades.map((u) => ({ id: `u-${u.id}`, label: u.id === unidadeId ? `${u.nome} (atual)` : u.nome, onSelect: () => setUnidadeId(u.id) })),
+                ]
+              : []),
+            ...(telas.some((t) => NO_MENU_DA_CONTA.includes(t.id))
+              ? [
+                  { type: 'heading' as const, label: 'Gestão' },
+                  ...telas
+                    .filter((t) => NO_MENU_DA_CONTA.includes(t.id))
+                    .map((t) => ({ id: `tela-${t.id}`, label: t.id === tela ? `${t.nome} (aberta)` : t.nome, onSelect: () => ir(t.id) })),
                 ]
               : []),
             { type: 'heading' as const, label: 'Aparência' },
@@ -352,6 +369,15 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
           />
         )}
         {tela === 'diretas' && <Diretas sessao={sessao} unidadeId={unidadeId} />}
+        {tela === 'pedidos' && (
+          <Pedidos
+            unidadeId={unidadeId}
+            aoAbrir={(id) => {
+              setAbrir(id);
+              setTela('atendimentos');
+            }}
+          />
+        )}
         <Suspense
           fallback={
             <div className="atendimentos__vazio">
@@ -369,7 +395,7 @@ function Casca({ sessao, aoSair, aoTrocarSenha }: { sessao: Sessao; aoSair: () =
       {isMobile && !emConversa && (
         <TabBar
           variant="solid"
-          activeId={['jornada', 'admin', 'relatorio', 'simulacao'].includes(tela) ? 'mais' : tela}
+          activeId={['pedidos', 'jornada', 'admin', 'relatorio', 'simulacao'].includes(tela) ? 'mais' : tela}
           onSelect={(id) => (id === 'mais' ? setMais(true) : ir(id as Tela))}
           items={[
             ...telas.slice(0, 3).map((t) => ({ id: t.id, label: t.nome, icon: icones[t.id], badge: t.id === 'diretas' && diretasNovas ? diretasNovas : undefined })),

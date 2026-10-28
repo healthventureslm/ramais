@@ -49,6 +49,8 @@ export class Saida {
         `SELECT m.id, m.texto, m.idioma, m.autor_tipo, m.status_envio, m.tentativas_envio, m.tipo, m.midia_chave, m.midia_mime,
                 (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'transcricao'
                   ORDER BY d.criado_em DESC LIMIT 1) AS transcricao,
+                (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'traducao' AND d.idioma = s.idioma
+                  ORDER BY d.criado_em DESC LIMIT 1) AS traducao_pronta,
                 s.id AS solicitacao_id, s.idioma AS idioma_destino, s.ultima_msg_solicitante_em, s.jornada_versao_id,
                 s.resumo, s.unidade_id, s.teste, s.local_id, st.telefone, cw.phone_number_id, cw.credencial_ref, cw.tipo AS canal_tipo,
                 (SELECT u.nome FROM unidade u WHERE u.id = s.unidade_id) AS hotel,
@@ -68,21 +70,18 @@ export class Saida {
     if (!dados) return;
     marcarSolicitacaoIA(dados.solicitacao_id, dados.unidade_id);
 
-    // 2. Traduzir (sem transação). Textos fixos já estão no idioma certo.
+    // 2. Traduzir (sem transação). O original está em português (equipe e textos fixos); o hóspede
+    // recebe no idioma dele. Texto fixo em ES/EN já vem com a versão escrita (traducao_pronta).
     // No áudio, o que se traduz é a transcrição; na foto, a legenda.
     const midia = dados.tipo === 'imagem' || dados.tipo === 'audio' ? (dados.tipo as 'imagem' | 'audio') : null;
     const original: string | null = dados.tipo === 'audio' ? dados.transcricao : dados.texto;
     let texto: string = original ?? '';
     let traducao: { texto: string; modelo: string; alerta: string | null; idioma: string } | null = null;
-    // Textos fixos existem em PT/ES/EN; para outro idioma (japonês, alemão…) saem em inglês e
-    // são traduzidos aqui, como a fala da equipe.
-    const fixoForaDoIdioma =
-      dados.autor_tipo === 'sistema' && /^[a-z]{2}$/.test(dados.idioma_destino ?? '') && idiomaDosTextos(dados.idioma_destino) !== dados.idioma_destino;
+    const base = (i: string | null) => (i ?? '').toLowerCase().slice(0, 2);
+    const pronta: string | null = dados.tipo === 'texto' ? dados.traducao_pronta : null;
+    if (pronta) texto = pronta;
     const precisaTraduzir =
-      Boolean(texto) &&
-      (dados.autor_tipo === 'pessoa' || dados.autor_tipo === 'ia' || fixoForaDoIdioma) &&
-      dados.idioma_destino &&
-      dados.idioma_destino !== dados.idioma;
+      !pronta && Boolean(texto) && Boolean(dados.idioma_destino) && dados.idioma_destino !== dados.idioma && base(dados.idioma_destino) !== base(dados.idioma);
     if (precisaTraduzir && this.ia.tradutor.disponivel) {
       try {
         const t = await this.ia.tradutor.traduzir(texto, dados.idioma_destino, { de: dados.idioma, glossario: dados.cfg.glossario });

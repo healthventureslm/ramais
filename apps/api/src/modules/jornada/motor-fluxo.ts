@@ -6,6 +6,7 @@ import {
   lerCampo,
   mascararCampo,
   NOMES_CAMPO,
+  idiomaDoOriginal,
   relogioLocal,
   sobrenomeConfere,
   type ValorColetado,
@@ -315,8 +316,14 @@ export class MotorFluxo {
     await this.acoes.enviarConteudo(c, s, b.pergunta, {});
     const dica = DICA[b.campo];
     if (repetir && dica) {
-      const i = s.idioma.slice(0, 2) as 'pt' | 'es' | 'en';
-      await this.acoes.enviarAoSolicitante(c, s, { texto: dica[i] ?? dica.en, idioma: i in dica ? i : 'en', autor: { tipo: 'sistema' } });
+      const i = idiomaDoOriginal(s.idioma);
+      // Original em português (a equipe lê); em ES/EN vai a versão escrita.
+      await this.acoes.enviarAoSolicitante(c, s, {
+        texto: dica.pt,
+        idioma: 'pt',
+        autor: { tipo: 'sistema' },
+        ...(i !== 'pt' ? { traducaoPronta: { idioma: i, texto: dica[i] } } : {}),
+      });
     }
   }
 

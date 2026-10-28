@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { CampoColeta, Gatilho, ResultadoRoteamento } from '@ramais/contracts';
-import type { ServicosIA, Traducao } from '@ramais/ai';
+import { pareceReserva, type ExtracaoReserva, type ServicosIA, type Traducao } from '@ramais/ai';
 import {
   aplicarGate,
   destinoNovaMensagem,
@@ -23,6 +23,7 @@ import { comContextoIA, marcarSolicitacaoIA } from '../../infra/uso-ia.js';
 import { Distribuicao } from '../distribuicao/distribuicao.service.js';
 import { MotorFluxo, type AnaliseFluxo, type EstadoFluxo } from './motor-fluxo.js';
 import { Acoes } from '../solicitacoes/acoes.js';
+import { Reservas } from '../reservas/reservas.service.js';
 import type { SolicitacaoRow } from '../solicitacoes/tipos.js';
 
 /** Uma mensagem recebida, já separada do payload do webhook. */
@@ -72,6 +73,8 @@ interface Analise {
   midiaChave: string | null;
   roteamento: (ResultadoRoteamento & { perguntas: unknown[] }) | null;
   conhecimento: { responde: boolean; resposta: string | null; confianca: number; fontes: string[]; modelo: string } | null;
+  /** Reserva de hospedagem: o que a mensagem diz (só quando a unidade tem a integração e o assunto parece reserva). */
+  reserva?: ExtracaoReserva | null;
   falhas: string[];
 }
 
@@ -95,6 +98,7 @@ export class Orquestrador {
     private readonly unidades: Unidades,
     private readonly distribuicao: Distribuicao,
     private readonly motor: MotorFluxo,
+    private readonly reservas: Reservas,
     private readonly meta: ClienteMeta,
     @Inject(IA) private readonly ia: ServicosIA,
     @Inject(ARMAZENAMENTO) private readonly armazenamento: Armazenamento,
@@ -404,7 +408,7 @@ export class Orquestrador {
       const local = s.local_id
         ? (await c.tx.client.query('SELECT identificador FROM local WHERE id = $1', [s.local_id])).rows[0]?.identificador
         : null;
-      return { cfg, estado: s.estado, local, conhecimento: conhecimento.rows };
+      return { cfg, estado: s.estado, local, conhecimento: conhecimento.rows, reserva: await this.reservas.paraAnalise(c, s) };
     });
 
     const roteador = this.ia.roteador(contexto.cfg.setores);
@@ -412,7 +416,10 @@ export class Orquestrador {
       ? [a.traducaoEn.texto, a.descricao ? `[photo: ${a.descricao.texto}]` : ''].filter(Boolean).join(' ')
       : null;
     const automacao = contexto.estado === 'automacao' || contexto.estado === 'resolvida';
-    const [rot, kbAutomacao] = await Promise.all([
+    // Reserva de hospedagem: em andamento, toda mensagem passa pelo extrator; senão, só a que tem cara de reserva.
+    const lerReserva =
+      automacao && contexto.reserva.hotel !== null && Boolean(a.textoBase) && (contexto.reserva.ativa !== null || pareceReserva([a.textoBase, textoEn]));
+    const [rot, kbAutomacao, reserva] = await Promise.all([
       tentar('roteamento', () =>
         roteador.rotear({
           texto: textoParaRotear,
@@ -430,7 +437,9 @@ export class Orquestrador {
       automacao
         ? tentar('conhecimento', () => this.ia.respondedor.responder(a.textoBase || textoParaRotear, contexto.conhecimento))
         : Promise.resolve(null),
+      lerReserva ? this.reservas.extrair(a.textoBase, this.reservas.contexto(contexto.cfg.fuso, contexto.reserva.ativa)) : Promise.resolve(undefined),
     ]);
+    a.reserva = reserva;
     // No meio de um atendimento, só quando o roteador vê um assunto novo ("qual a senha do Wi-Fi?"
     // enquanto a manutenção cuida da pia): "ok", "obrigado" e o próprio assunto não gastam a base.
     const assuntoNovo = !automacao && rot?.saida.assunto_novo && rot.confianca.assunto_novo >= contexto.cfg.limites.gatilho;
@@ -548,6 +557,11 @@ export class Orquestrador {
         }
 
         if (novo && rot && (await this.assuntoNovo(c, s, a, rot, decisaoId, p.mensagemId))) return;
+
+        // Reserva de hospedagem automática (VOA): pergunta o que falta, mostra opções, manda o link.
+        if ((s.estado === 'automacao' || s.estado === 'resolvida') && a.reserva !== undefined) {
+          if (await this.reservas.tratar(c, s, a.reserva, a.conhecimento, cfg.limites.respostaAutomatica, a.textoBase)) return;
+        }
 
         // Aberto pelo menu: a primeira fala do hóspede vira o resumo que a equipe lê.
         if ((s.contexto as { peloMenu?: boolean }).peloMenu && a.textoBase) {

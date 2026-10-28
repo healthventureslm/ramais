@@ -9,11 +9,12 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { ServicosIA } from '@ramais/ai';
-import { ArquivoMidia, ChatMensagemReq, ChatSessaoReq, ChatTextosReq, InscricaoPushReq, type ChatView } from '@ramais/contracts';
+import { ArquivoMidia, ChatMensagemReq, ChatSessaoReq, ChatTextosReq, InscricaoPushReq, PedidoReq, type ChatView } from '@ramais/contracts';
 import { resolverChat, resolverQuarto } from '@ramais/db';
 import type { Response } from 'express';
 import type pg from 'pg';
@@ -28,6 +29,7 @@ import { Unidades } from '../../infra/unidades.js';
 import { comContextoIA } from '../../infra/uso-ia.js';
 import { Uuid, Zod } from '../../infra/validacao.js';
 import { Orquestrador, solicitanteDoQuarto, type EntradaMensagem } from '../jornada/orquestrador.js';
+import { Pedidos } from '../pedidos/pedidos.service.js';
 
 const ChatSetorReq = z.object({ chave: z.string().regex(/^[a-z][a-z0-9_]*$/).max(60) });
 
@@ -61,6 +63,7 @@ export class ChatQuartoController {
     @Inject(IA) private readonly ia: ServicosIA,
     private readonly unidades: Unidades,
     private readonly orquestrador: Orquestrador,
+    private readonly pedidos: Pedidos,
   ) {}
 
   /** Textos da tela já traduzidos, por idioma e conteúdo: só o primeiro hóspede de cada idioma espera a IA. */
@@ -141,6 +144,66 @@ export class ChatQuartoController {
       naoAntesDe: s.estadiaDesde.toISOString(),
       chave: b.chave,
     });
+  }
+
+  // ---------- Catálogo e pedidos ----------
+
+  /** O que o hotel vende ou agenda (room service, spa, passeios…), para o "Pedir ou reservar". */
+  @Get('catalogo')
+  async catalogo(@Headers('x-chat') token: string | undefined) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    return this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      return { itens: await this.pedidos.itens(c, s.unidadeId, true), hoje: await this.pedidos.hoje(c, s.unidadeId) };
+    });
+  }
+
+  @Get('catalogo/:id/horarios')
+  async horarios(
+    @Headers('x-chat') token: string | undefined,
+    @Param('id', Uuid) id: string,
+    @Query('data') data: string,
+    @Query('pessoas') pessoas?: string,
+  ) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data ?? '')) throw new NotFoundException();
+    const n = Math.min(100, Math.max(1, Number(pessoas) || 1));
+    const { orgId, sessaoId } = await this.resolver(token);
+    return this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      return { horarios: await this.pedidos.horarios(c, s.unidadeId, id, data, n) };
+    });
+  }
+
+  @Post('pedidos')
+  @HttpCode(201)
+  async pedir(@Headers('x-chat') token: string | undefined, @Body(new Zod(PedidoReq)) b: PedidoReq) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    const { s, canalId } = await this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      return { s, canalId: await this.canalWeb(c, s.unidadeId) };
+    });
+    return this.pedidos.criarDoHospede({ orgId, unidadeId: s.unidadeId, localId: s.localId, canalId, naoAntesDe: s.estadiaDesde.toISOString(), req: b });
+  }
+
+  /** Os pedidos da estadia, com a situação de cada um. */
+  @Get('pedidos')
+  async meusPedidos(@Headers('x-chat') token: string | undefined) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    return this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      return { pedidos: await this.pedidos.doQuarto(c, s.localId, s.estadiaDesde) };
+    });
+  }
+
+  @Post('pedidos/:id/cancelar')
+  @HttpCode(200)
+  async cancelarPedido(@Headers('x-chat') token: string | undefined, @Param('id', Uuid) id: string) {
+    const { orgId, sessaoId } = await this.resolver(token);
+    await this.nucleo.executar(orgId, async (c) => {
+      const s = await this.sessao(c, sessaoId);
+      await this.pedidos.cancelarPeloHospede(c, s.localId, s.estadiaDesde, id);
+    });
+    return { ok: true };
   }
 
   /** O hóspede pediu aviso quando a equipe responder: este navegador passa a receber (até a sessão vencer). */
@@ -279,7 +342,7 @@ export class ChatQuartoController {
   }
 
   /** Setores do Menu principal (os do catálogo da jornada que estão ativos) e com qual o hóspede fala agora. */
-  private async menu(c: Ctx, s: SessaoChat): Promise<Pick<ChatView, 'setores' | 'setorAtual'>> {
+  private async menu(c: Ctx, s: SessaoChat): Promise<Pick<ChatView, 'setores' | 'setorAtual' | 'temCatalogo'>> {
     const { cfg } = await this.unidades.versaoAtual(c.tx, s.unidadeId);
     const ativos = new Set((await this.unidades.setores(c.tx, s.unidadeId)).map((x) => x.chave));
     const atual = await c.tx.client.query<{ chave: string }>(
@@ -292,6 +355,9 @@ export class ChatQuartoController {
     return {
       setores: cfg.setores.filter((x) => ativos.has(x.chave)).map((x) => ({ chave: x.chave, nome: x.nome, nomes: x.nomes })),
       setorAtual: atual.rows[0]?.chave ?? null,
+      temCatalogo: Boolean(
+        (await c.tx.client.query('SELECT 1 FROM catalogo_item WHERE unidade_id = $1 AND ativo LIMIT 1', [s.unidadeId])).rowCount,
+      ),
     };
   }
 

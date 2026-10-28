@@ -1,0 +1,15 @@
+/* ============================================================
+   Ramais — Pedidos do catálogo (room service e reservas)
+   Só o que o DS não cobre: o filtro com largura contida e os
+   selos dentro da linha da lista. Só tokens do DS.
+   ============================================================ */
+
+/* Filtro: largo o bastante para os três rótulos, sem esticar na tela grande. */
+.pedidos__filtro { max-width: 420px; min-width: 0; }
+
+/* Selos (estado, lançado na conta) abaixo do subtítulo da linha. */
+.pedidos__selos { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); min-width: 0; }
+.pedidos__obs { margin-top: var(--space-1); overflow-wrap: anywhere; }
+
+/* Total do pedido no cartão da lateral. */
+.pedido__total { font-weight: var(--weight-semibold); }

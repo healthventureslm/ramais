@@ -20,6 +20,11 @@ import { Distribuicao } from './modules/distribuicao/distribuicao.service.js';
 import { Escalonamento } from './modules/distribuicao/escada.service.js';
 import { EquipesController } from './modules/equipes/equipes.controller.js';
 import { NotificacoesController } from './modules/equipes/notificacoes.controller.js';
+import { CatalogoController } from './modules/admin/catalogo.controller.js';
+import { PedidosController } from './modules/pedidos/pedidos.controller.js';
+import { Pedidos } from './modules/pedidos/pedidos.service.js';
+import { ReservasController } from './modules/reservas/reservas.controller.js';
+import { Reservas } from './modules/reservas/reservas.service.js';
 import { Presencas } from './modules/equipes/presenca.service.js';
 import { MotorFluxo } from './modules/jornada/motor-fluxo.js';
 import { Orquestrador } from './modules/jornada/orquestrador.js';
@@ -31,7 +36,7 @@ import { SolicitacoesController } from './modules/solicitacoes/solicitacoes.cont
 import { Processadores } from './worker/processadores.js';
 
 /** Serviços de domínio, compartilhados pelos dois processos. */
-const SERVICOS = [Acoes, Comandos, Consultas, Distribuicao, Escalonamento, Presencas, MotorFluxo, Orquestrador, ProcessarWebhook, Saida, DerivarMidia];
+const SERVICOS = [Acoes, Comandos, Consultas, Pedidos, Reservas, Distribuicao, Escalonamento, Presencas, MotorFluxo, Orquestrador, ProcessarWebhook, Saida, DerivarMidia];
 
 @Module({
   imports: [InfraModule.paraProcesso('api')],
@@ -40,6 +45,9 @@ const SERVICOS = [Acoes, Comandos, Consultas, Distribuicao, Escalonamento, Prese
     ChatQuartoController,
     EquipesController,
     NotificacoesController,
+    CatalogoController,
+    PedidosController,
+    ReservasController,
     SolicitacoesController,
     DiretasController,
     DashboardController,

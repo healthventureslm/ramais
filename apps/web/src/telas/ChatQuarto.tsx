@@ -1,5 +1,5 @@
 import { ActionSheet, Banner, Button, EmptyState, HVProvider, IconButton, Textarea } from '@healthventureslm/design-system';
-import type { ChatView } from '@ramais/contracts';
+import type { CatalogoItemView, ChatView, PedidoView } from '@ramais/contracts';
 import {
   AlertCircle,
   BedDouble,
@@ -16,7 +16,9 @@ import {
   MapPinned,
   MessagesSquare,
   Mic,
+  ReceiptText,
   SendHorizontal,
+  ShoppingBag,
   UtensilsCrossed,
   Wrench,
 } from 'lucide-react';
@@ -24,6 +26,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { API } from '../api';
 import { Avisos, avisar } from '../componentes/Avisos';
 import { MidiaMensagem, TEXTOS_MIDIA, useAnexos, type ArquivoPronto, type TextosMidia } from '../componentes/Midia';
+import { CatalogoHospede, MeusPedidos, type ApiCatalogo } from '../componentes/CatalogoHospede';
 import { ativarChat, estadoNotificacao, type EstadoNotificacao } from '../notificacoes';
 import { hora } from '../util';
 
@@ -52,11 +55,41 @@ const TEXTOS = {
     avisoAtivo: 'Pronto: você recebe um aviso neste celular quando o hotel responder.',
     avisoBloqueado: 'As notificações deste site estão bloqueadas no navegador.',
     menu: 'Menu principal',
-    menuTitulo: 'Com quem você quer falar?',
-    menuDica: 'Escolha o setor e a sua conversa vai direto para ele.',
+    menuTitulo: 'Como podemos ajudar?',
+    menuDica: 'Peça ou reserve um serviço, ou escolha o setor e a sua conversa vai direto para ele.',
     menuAtual: 'Você está falando com este setor',
     menuCancelar: 'Cancelar',
     menuJaEsta: 'Você já está falando com este setor.',
+    pedirOuReservar: 'Pedir ou reservar',
+    pedirDica: 'Room service, spa, passeios, transfer e mais',
+    meusPedidos: 'Meus pedidos',
+    meusPedidosDica: 'Acompanhe ou cancele o que você pediu',
+    catalogoVazio: 'O hotel ainda não cadastrou itens.',
+    voltar: 'Voltar',
+    quantidade: 'Quantidade',
+    pessoas: 'Pessoas',
+    dia: 'Dia',
+    horario: 'Horário',
+    semHorario: 'Nenhum horário livre neste dia. Escolha outro dia.',
+    observacao: 'Observação (opcional)',
+    total: 'Total',
+    naConta: 'Lançado na conta do quarto.',
+    pedir: 'Pedir',
+    reservar: 'Reservar',
+    semPreco: 'Sem custo',
+    porPessoa: 'por pessoa',
+    amanha: 'Amanhã',
+    estadoPendente: 'Aguardando confirmação',
+    estadoConfirmado: 'Confirmado',
+    estadoRecusado: 'Não foi possível',
+    estadoCancelado: 'Cancelado',
+    estadoConcluido: 'Concluído',
+    cancelarPedido: 'Cancelar',
+    nenhumPedido: 'Você ainda não fez pedidos nesta estadia.',
+    menos: 'Diminuir',
+    mais: 'Aumentar',
+    pedidoEnviado: 'Pedido enviado. Avisamos aqui quando for confirmado.',
+    falarComSetor: 'Falar com um setor',
     midia: {
       ...TEXTOS_MIDIA,
     } satisfies TextosMidia,
@@ -83,11 +116,41 @@ const TEXTOS = {
     avisoAtivo: 'Done: you will get a notification on this phone when the hotel replies.',
     avisoBloqueado: 'Notifications for this site are blocked in your browser.',
     menu: 'Main menu',
-    menuTitulo: 'Who would you like to talk to?',
-    menuDica: 'Choose a department and your conversation goes straight to it.',
+    menuTitulo: 'How can we help?',
+    menuDica: 'Order or book a service, or choose a department and your conversation goes straight to it.',
     menuAtual: 'You are talking to this department',
     menuCancelar: 'Cancel',
     menuJaEsta: 'You are already talking to this department.',
+    pedirOuReservar: 'Order or book',
+    pedirDica: 'Room service, spa, tours, transfers and more',
+    meusPedidos: 'My orders',
+    meusPedidosDica: 'Track or cancel what you ordered',
+    catalogoVazio: 'The hotel has not added any items yet.',
+    voltar: 'Back',
+    quantidade: 'Quantity',
+    pessoas: 'People',
+    dia: 'Day',
+    horario: 'Time',
+    semHorario: 'No times available on this day. Choose another day.',
+    observacao: 'Note (optional)',
+    total: 'Total',
+    naConta: 'Charged to your room.',
+    pedir: 'Order',
+    reservar: 'Book',
+    semPreco: 'No charge',
+    porPessoa: 'per person',
+    amanha: 'Tomorrow',
+    estadoPendente: 'Waiting for confirmation',
+    estadoConfirmado: 'Confirmed',
+    estadoRecusado: 'Not possible',
+    estadoCancelado: 'Cancelled',
+    estadoConcluido: 'Done',
+    cancelarPedido: 'Cancel',
+    nenhumPedido: 'You have not ordered anything during this stay.',
+    menos: 'Decrease',
+    mais: 'Increase',
+    pedidoEnviado: 'Order sent. We will let you know here when it is confirmed.',
+    falarComSetor: 'Talk to a department',
     midia: {
       enviarFoto: 'Send photo',
       gravarAudio: 'Record voice message',
@@ -134,11 +197,41 @@ const TEXTOS = {
     avisoAtivo: 'Listo: recibirá un aviso en este celular cuando el hotel responda.',
     avisoBloqueado: 'Las notificaciones de este sitio están bloqueadas en el navegador.',
     menu: 'Menú principal',
-    menuTitulo: '¿Con quién quiere hablar?',
-    menuDica: 'Elija el sector y su conversación va directo a él.',
+    menuTitulo: '¿Cómo podemos ayudarle?',
+    menuDica: 'Pida o reserve un servicio, o elija el sector y su conversación va directo a él.',
     menuAtual: 'Está hablando con este sector',
     menuCancelar: 'Cancelar',
     menuJaEsta: 'Ya está hablando con este sector.',
+    pedirOuReservar: 'Pedir o reservar',
+    pedirDica: 'Room service, spa, paseos, traslados y más',
+    meusPedidos: 'Mis pedidos',
+    meusPedidosDica: 'Siga o cancele lo que pidió',
+    catalogoVazio: 'El hotel aún no cargó ítems.',
+    voltar: 'Volver',
+    quantidade: 'Cantidad',
+    pessoas: 'Personas',
+    dia: 'Día',
+    horario: 'Horario',
+    semHorario: 'No hay horarios libres este día. Elija otro día.',
+    observacao: 'Observación (opcional)',
+    total: 'Total',
+    naConta: 'Cargado a la cuenta de la habitación.',
+    pedir: 'Pedir',
+    reservar: 'Reservar',
+    semPreco: 'Sin costo',
+    porPessoa: 'por persona',
+    amanha: 'Mañana',
+    estadoPendente: 'Esperando confirmación',
+    estadoConfirmado: 'Confirmado',
+    estadoRecusado: 'No fue posible',
+    estadoCancelado: 'Cancelado',
+    estadoConcluido: 'Concluido',
+    cancelarPedido: 'Cancelar',
+    nenhumPedido: 'Aún no hizo pedidos en esta estadía.',
+    menos: 'Disminuir',
+    mais: 'Aumentar',
+    pedidoEnviado: 'Pedido enviado. Le avisamos aquí cuando se confirme.',
+    falarComSetor: 'Hablar con un sector',
     midia: {
       enviarFoto: 'Enviar foto',
       gravarAudio: 'Grabar audio',
@@ -429,6 +522,17 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
 
   // Menu principal: o hóspede escolhe o setor; a conversa vai para lá a qualquer momento.
   const [menuAberto, setMenuAberto] = useState(false);
+  // Catálogo do hotel (pedir ou reservar) e os pedidos da estadia.
+  const [catalogoAberto, setCatalogoAberto] = useState(false);
+  const [pedidosAbertos, setPedidosAbertos] = useState(false);
+  const apiCatalogo: ApiCatalogo = {
+    catalogo: () => comSessao((tk) => chamar<{ itens: CatalogoItemView[]; hoje: string }>('GET', '/chat/catalogo', tk)),
+    horarios: (id, data, pessoas) =>
+      comSessao((tk) => chamar<{ horarios: { hora: string; livres: number | null }[] }>('GET', `/chat/catalogo/${id}/horarios?data=${data}&pessoas=${pessoas}`, tk)),
+    pedir: (b) => comSessao((tk) => chamar<PedidoView>('POST', '/chat/pedidos', tk, b)),
+    pedidos: () => comSessao((tk) => chamar<{ pedidos: PedidoView[] }>('GET', '/chat/pedidos', tk)),
+    cancelar: (id) => comSessao((tk) => chamar('POST', `/chat/pedidos/${id}/cancelar`, tk)),
+  };
   async function escolherSetor(chave: string) {
     setMenuAberto(false);
     try {
@@ -517,16 +621,63 @@ export function ChatQuarto({ codigo }: { codigo: string }) {
           title={t.menuTitulo}
           description={t.menuDica}
           cancelLabel={t.menuCancelar}
-          items={(dados?.setores ?? []).map((s) => {
-            const Icone = ICONE_SETOR[s.chave] ?? MessagesSquare;
-            return {
-              id: s.chave,
-              label: nomeDoSetor(s, idioma),
-              description: dados?.setorAtual === s.chave ? t.menuAtual : undefined,
-              icon: <Icone />,
-              onSelect: () => void escolherSetor(s.chave),
-            };
-          })}
+          items={[
+            ...(dados?.temCatalogo
+              ? [
+                  {
+                    id: 'pedir',
+                    label: t.pedirOuReservar,
+                    description: t.pedirDica,
+                    icon: <ShoppingBag />,
+                    onSelect: () => {
+                      setMenuAberto(false);
+                      setCatalogoAberto(true);
+                    },
+                  },
+                  {
+                    id: 'meus-pedidos',
+                    label: t.meusPedidos,
+                    description: t.meusPedidosDica,
+                    icon: <ReceiptText />,
+                    onSelect: () => {
+                      setMenuAberto(false);
+                      setPedidosAbertos(true);
+                    },
+                  },
+                ]
+              : []),
+            ...(dados?.setores ?? []).map((s) => {
+              const Icone = ICONE_SETOR[s.chave] ?? MessagesSquare;
+              return {
+                id: s.chave,
+                label: nomeDoSetor(s, idioma),
+                description: dados?.setorAtual === s.chave ? t.menuAtual : undefined,
+                icon: <Icone />,
+                onSelect: () => void escolherSetor(s.chave),
+              };
+            }),
+          ]}
+        />
+        <CatalogoHospede
+          aberto={catalogoAberto}
+          aoFechar={() => setCatalogoAberto(false)}
+          api={apiCatalogo}
+          idioma={idioma}
+          t={t}
+          aoErro={(msg) => avisar(msg, 'error')}
+          aoPedir={() => {
+            setCatalogoAberto(false);
+            avisar(t.pedidoEnviado, 'success');
+            void carregar();
+          }}
+        />
+        <MeusPedidos
+          aberto={pedidosAbertos}
+          aoFechar={() => setPedidosAbertos(false)}
+          api={apiCatalogo}
+          idioma={idioma}
+          t={t}
+          aoErro={(msg) => avisar(msg, 'error')}
         />
         {offline && <Banner variant="warning" title={t.semConexao} />}
         {notificacao === 'pendente' && escreveu && (

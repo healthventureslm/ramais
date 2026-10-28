@@ -173,6 +173,15 @@ body { background: var(--surface-canvas); color: var(--text-body); font: var(--t
 /* Cartão de número: valor e selo de variação numa linha que não quebrava; em cartão estreito
    ("US$ 0,00 −100% vs. anterior") vazava pela borda. */
 .hv-statcard__valuerow { flex-wrap: wrap; row-gap: var(--space-1); min-width: 0; }
+/* TopNav: os pontos de quebra do DS supõem poucos destinos; com 6 itens, o bloco do usuário cobria
+   os últimos já em 1024px. Sai o nome antes (fica o avatar com o menu) e, mais estreito, ficam os ícones. */
+@container hv-topnav (max-width: 1180px) {
+  .hv-topnav .hv-topnav__who { display: none; }
+}
+@container hv-topnav (max-width: 1000px) {
+  .hv-topnav .hv-topnav__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .hv-topnav .hv-topnav__item { min-width: 44px; justify-content: center; padding: 0; }
+}
 
 /* ---------- Dashboard ---------- */
 .dash-roscas { display: flex; flex-wrap: wrap; gap: var(--space-6); justify-content: space-around; margin-bottom: var(--space-4); }

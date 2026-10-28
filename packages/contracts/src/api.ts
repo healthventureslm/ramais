@@ -172,6 +172,104 @@ export const InscricaoPushReq = z.object({
 });
 export type InscricaoPushReq = z.infer<typeof InscricaoPushReq>;
 
+// ---------- Catálogo e pedidos (room service, spa, passeios, transfer…) ----------
+
+const Hora = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'use HH:MM');
+const Dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use AAAA-MM-DD');
+const NomesI18n = z.object({ es: z.string().trim().max(160).optional(), en: z.string().trim().max(160).optional() }).default({});
+
+/** Janela da grade semanal: nos dias (0 = domingo), de `inicio` a `fim`, um horário a cada `intervaloMin`. */
+export const JanelaHorario = z
+  .object({ dias: z.array(z.number().int().min(0).max(6)).min(1), inicio: Hora, fim: Hora, intervaloMin: z.number().int().min(5).max(1440) })
+  .refine((j) => j.inicio < j.fim, { message: 'o fim precisa vir depois do início' });
+export type JanelaHorario = z.infer<typeof JanelaHorario>;
+
+export const CatalogoItemReq = z
+  .object({
+    setorId: z.uuid(),
+    tipo: z.enum(['compra', 'agendamento']),
+    categoria: z.string().trim().min(1).max(60),
+    nome: z.string().trim().min(1).max(120),
+    descricao: z.string().trim().max(1000).default(''),
+    nomes: NomesI18n,
+    descricoes: z.object({ es: z.string().trim().max(1000).optional(), en: z.string().trim().max(1000).optional() }).default({}),
+    precoCentavos: z.number().int().min(0).max(100_000_000).nullable().default(null),
+    porPessoa: z.boolean().default(false),
+    maxQuantidade: z.number().int().min(1).max(100).default(10),
+    duracaoMin: z.number().int().min(5).max(1440).nullable().default(null),
+    capacidade: z.number().int().min(1).max(10_000).nullable().default(null),
+    vagasPor: z.enum(['pessoa', 'pedido']).default('pessoa'),
+    horarios: z.array(JanelaHorario).max(30).default([]),
+    antecedenciaMin: z.number().int().min(0).max(10_080).default(60),
+    diasAFrente: z.number().int().min(0).max(120).default(14),
+    ativo: z.boolean().default(true),
+    ordem: z.number().int().default(0),
+  })
+  .superRefine((v, ctx) => {
+    if (v.tipo !== 'agendamento') return;
+    if (!v.duracaoMin) ctx.addIssue({ code: 'custom', message: 'agendamento precisa de duração', path: ['duracaoMin'] });
+    if (!v.horarios.length) ctx.addIssue({ code: 'custom', message: 'agendamento precisa de pelo menos uma janela de horários', path: ['horarios'] });
+  });
+export type CatalogoItemReq = z.infer<typeof CatalogoItemReq>;
+
+export interface CatalogoItemView {
+  id: string;
+  setorId: string;
+  setorNome: string;
+  tipo: 'compra' | 'agendamento';
+  categoria: string;
+  nome: string;
+  descricao: string;
+  nomes: { es?: string; en?: string };
+  descricoes: { es?: string; en?: string };
+  precoCentavos: number | null;
+  porPessoa: boolean;
+  maxQuantidade: number;
+  duracaoMin: number | null;
+  capacidade: number | null;
+  vagasPor: 'pessoa' | 'pedido';
+  horarios: JanelaHorario[];
+  antecedenciaMin: number;
+  diasAFrente: number;
+  ativo: boolean;
+  ordem: number;
+}
+
+/** O que o hóspede pede pelo chat. Agendamento leva data e hora (no relógio do hotel). */
+export const PedidoReq = z.object({
+  itemId: z.uuid(),
+  quantidade: z.number().int().min(1).max(100),
+  data: Dia.optional(),
+  hora: Hora.optional(),
+  observacao: z.string().trim().max(500).optional(),
+});
+export type PedidoReq = z.infer<typeof PedidoReq>;
+
+export const RecusarPedidoReq = z.object({ motivo: z.string().trim().min(2).max(300) });
+
+export type EstadoPedido = 'pendente' | 'confirmado' | 'recusado' | 'cancelado' | 'concluido';
+
+export interface PedidoView {
+  id: string;
+  solicitacaoId: string;
+  itemId: string;
+  itemNome: string;
+  categoria: string | null;
+  setorNome: string | null;
+  tipo: 'compra' | 'agendamento';
+  quantidade: number;
+  agendadoPara: string | null;
+  duracaoMin: number | null;
+  observacao: string | null;
+  precoUnitCentavos: number | null;
+  totalCentavos: number | null;
+  estado: EstadoPedido;
+  motivo: string | null;
+  lancadoEm: string | null;
+  quarto: string | null;
+  criadoEm: string;
+}
+
 // ---------- Chat do quarto (QR → chat no navegador do hóspede) ----------
 
 export const ChatSessaoReq = z.object({
@@ -222,6 +320,8 @@ export interface ChatView {
   setores: { chave: string; nome: string; nomes: { es?: string; en?: string } }[];
   /** Setor com que o hóspede está falando agora, se algum. */
   setorAtual: string | null;
+  /** O hotel tem catálogo ativo (room service, spa, passeios…): o menu mostra "Pedir ou reservar". */
+  temCatalogo: boolean;
 }
 
 // ---------- Dashboard ----------

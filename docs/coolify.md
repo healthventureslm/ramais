@@ -62,7 +62,7 @@ Opcionais, com default:
 
 - `META_DRY_RUN=true`: nada vai para a Meta.
 - `SEED_DEMO=false`: veja a seção 4.
-- `IA_MODELO_*`: configuração B de `docs/custos.md`.
+- `IA_MODELO_*`: desde 28/10/2026 a conta da OpenRouter exige Zero Data Retention (guardrail do workspace), e os Gemini ficaram de fora. Use: `IA_MODELO_TRADUCAO=minimax/minimax-m3.1-flash`, `IA_MODELO_TRADUCAO_ALTERNATIVO=tencent/hy-mt2-30b-a3b`, `IA_MODELO_RESPOSTA=minimax/minimax-m3.1-flash`, `IA_MODELO_MULTIMODAL=xiaomi/mimo-v2.6-flash`, `IA_MODELO_ROTEAMENTO_ALTERNATIVO=minimax/minimax-m3.1-flash` (o roteamento continua no `typesafe/jev-1.13`). Para trocar, prove antes com `npx tsx packages/ai/prova-modelos.mts <modelo>` e `IA_MODELO_RESPOSTA=<modelo> npx tsx packages/ai/prova-base.mts`.
 - `ARMAZENAMENTO=local`: volume `armazenamento`.
 
 Guarde as senhas do banco num cofre: elas ficam gravadas no volume na primeira subida.
@@ -173,6 +173,15 @@ Os horários de café, check-in e check-out, piscina e academia, e a numeração
 - **Hóspede, no chat do quarto:** depois de escrever, aparece "Avisar quando o hotel responder". A resposta da equipe chega como notificação no celular dele.
 - **iPhone:** o Safari só recebe notificação com o site adicionado à Tela de Início. Numa aba comum, o botão não aparece. Android (Chrome) e computador funcionam direto.
 - **App da equipe (celular):** usa o FCM (`FCM_CONTA_SERVICO_B64`). Sem ele, os avisos do app só vão para o log; a web continua funcionando pelo Web Push.
+
+## Reserva de hospedagem automática (VOA)
+
+O hóspede pede um quarto (ou mais noites) pelo WhatsApp ou pelo chat do quarto; a IA pergunta o que falta, busca na API de parceiros da VOA, mostra as opções com o preço final (com ISS) e manda o link de pagamento do checkout da VOA. O webhook da VOA avisa quando foi pago, e o hóspede recebe o código da reserva.
+
+- No **ramais-api**: `VOA_API_TOKEN` (token de parceiro que a VOA passou) e `VOA_WEBHOOK_SEGREDO` (o valor exato do cabeçalho `Authorization` que a VOA vai mandar, por exemplo `Bearer <segredo>`). Opcionais: `VOA_API_URL`, `VOA_CHECKOUT_URL`, `VOA_LINK_MINUTOS` (validade do link, padrão 120).
+- **Para a VOA:** a URL do webhook, `https://<dominio>/api/webhooks/voa`, e o valor de `VOA_WEBHOOK_SEGREDO`.
+- **Em cada hotel:** Administração → Reservas → ID do hotel na VOA → Ligar. O Ramais confere o ID com a VOA antes de gravar.
+- Se a VOA falhar, o hóspede é avisado e o pedido vai para a fila da recepção.
 
 ## 5. WhatsApp (quando houver número)
 

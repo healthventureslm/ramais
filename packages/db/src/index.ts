@@ -91,6 +91,13 @@ export async function resolverQuarto(pool: pg.Pool, codigo: string) {
   return l ? { orgId: l.org_id, unidadeId: l.unidade_id, localId: l.local_id } : null;
 }
 
+/** Webhook da VOA: o uuid da oferta diz o org e a reserva (o aviso chega sem login). */
+export async function resolverOfertaVoa(pool: pg.Pool, uuid: string) {
+  const r = await pool.query<{ org_id: string; reserva_id: string }>('SELECT * FROM sistema.resolver_oferta_voa($1)', [uuid]);
+  const l = r.rows[0];
+  return l ? { orgId: l.org_id, reservaId: l.reserva_id } : null;
+}
+
 /** Sessão do chat do quarto: o hash do segredo do navegador diz o org e a sessão (se não expirou). */
 export async function resolverChat(pool: pg.Pool, tokenHash: string) {
   const r = await pool.query<{ org_id: string; sessao_id: string }>('SELECT * FROM sistema.resolver_chat($1)', [tokenHash]);

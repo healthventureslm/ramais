@@ -1,22 +1,23 @@
 /**
  * Cria o hotel de demonstração (demo-dados.ts) numa organização própria, separada do Hotel
  * Piloto: unidade, setores, logins (admin, gerente e um por setor), quartos com QR para o chat
- * do quarto, hóspedes em casa e base de conhecimento.
+ * do quarto, hóspedes em casa, base de conhecimento e catálogo (room service, spa, passeios…).
  *
  * Todos os logins usam a mesma senha, DEMO_SENHA (6+ caracteres): é para apresentação. Troque
  * ou desative as contas antes de o hotel usar de verdade.
  *
- * Idempotente: se o login do admin já existe, não faz nada. Em produção roda no contêiner de
+ * Idempotente: se o login do admin já existe, só acrescenta as entradas novas da base de
+ * conhecimento e os itens novos do catálogo (por categoria + nome). Em produção roda no contêiner de
  * migração quando DEMO_SENHA está definida (docker-compose.api.yml).
  *   DEMO_SENHA=... pnpm --filter @ramais/seed demo
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { carregarEnv, comTenant, criarPool } from '@ramais/db';
+import { carregarEnv, comTenant, criarPool, type Tx } from '@ramais/db';
 import { gerarCodigoLocal } from '@ramais/domain';
 import { configHotel } from '@ramais/vertical-hotel';
 
-import { DEMO, DEMO_CONHECIMENTO, DEMO_HOSPEDES, DEMO_PESSOAS, DEMO_QUARTOS } from './demo-dados.js';
+import { DEMO, DEMO_CATALOGO, DEMO_CONHECIMENTO, DEMO_HOSPEDES, DEMO_PESSOAS, DEMO_QUARTOS } from './demo-dados.js';
 
 carregarEnv();
 const url = process.env.DATABASE_URL_OWNER;
@@ -28,6 +29,49 @@ const email = (usuario: string) => `${usuario}@${DEMO.dominioEmail}`;
 const pool = criarPool(url, 2);
 const aleatorio = (n: number) => new Uint8Array(randomBytes(n));
 
+/**
+ * Insere os itens do catálogo que a unidade ainda não tem (mesma categoria e nome). O que já existe,
+ * mesmo editado ou desativado na tela de administração, fica como está. Devolve quantos entraram.
+ */
+async function sincronizarCatalogo(client: Tx['client'], orgId: string, unidadeId: string): Promise<number> {
+  const s = await client.query<{ chave: string; id: string }>('SELECT chave, id FROM setor WHERE unidade_id = $1', [unidadeId]);
+  const setores = new Map(s.rows.map((r) => [r.chave, r.id]));
+  let n = 0;
+  for (const [ordem, i] of DEMO_CATALOGO.entries()) {
+    const setorId = setores.get(i.setor);
+    if (!setorId) throw new Error(`setor desconhecido no catálogo: ${i.setor}`);
+    const r = await client.query(
+      `INSERT INTO catalogo_item (org_id, unidade_id, setor_id, tipo, categoria, nome, descricao, nomes, descricoes, preco_centavos,
+         por_pessoa, max_quantidade, duracao_min, capacidade, vagas_por, horarios, antecedencia_min, dias_a_frente, ordem)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+       WHERE NOT EXISTS (SELECT 1 FROM catalogo_item WHERE unidade_id = $2 AND categoria = $5 AND nome = $6)`,
+      [
+        orgId,
+        unidadeId,
+        setorId,
+        i.tipo,
+        i.categoria,
+        i.nome,
+        i.descricao,
+        JSON.stringify(i.nomes),
+        JSON.stringify(i.descricoes ?? {}),
+        i.precoCentavos,
+        i.porPessoa ?? false,
+        i.maxQuantidade ?? 10,
+        i.duracaoMin ?? null,
+        i.capacidade ?? null,
+        i.vagasPor ?? 'pessoa',
+        JSON.stringify(i.horarios ?? []),
+        i.antecedenciaMin ?? 60,
+        i.diasAFrente ?? 14,
+        ordem,
+      ],
+    );
+    n += r.rowCount ?? 0;
+  }
+  return n;
+}
+
 // Como dono, sem tenant, a RLS esconde tudo: a checagem usa a função de sistema do login.
 const ja = await pool.query<{ org_id: string }>('SELECT * FROM sistema.resolver_login($1)', [email('admin')]);
 if (ja.rows.length) {
@@ -35,7 +79,7 @@ if (ja.rows.length) {
   // editado ou desativado na tela de administração) fica como está.
   const novas = await comTenant(pool, ja.rows[0]!.org_id, async ({ client }) => {
     const u = await client.query<{ id: string }>('SELECT id FROM unidade WHERE nome = $1', [DEMO.unidade]);
-    if (!u.rows[0]) return 0;
+    if (!u.rows[0]) return { base: 0, catalogo: 0 };
     let n = 0;
     for (const k of DEMO_CONHECIMENTO) {
       const r = await client.query(
@@ -45,9 +89,12 @@ if (ja.rows.length) {
       );
       n += r.rowCount ?? 0;
     }
-    return n;
+    return { base: n, catalogo: await sincronizarCatalogo(client, ja.rows[0]!.org_id, u.rows[0].id) };
   });
-  console.log(`demo já existe (${DEMO.unidade}, login ${email('admin')}). Base de conhecimento: ${novas} entrada(s) nova(s).`);
+  console.log(
+    `demo já existe (${DEMO.unidade}, login ${email('admin')}). Base de conhecimento: ${novas.base} entrada(s) nova(s); ` +
+      `catálogo: ${novas.catalogo} item(ns) novo(s).`,
+  );
   await pool.end();
   process.exit(0);
 }
@@ -125,11 +172,13 @@ await comTenant(pool, orgId, async ({ client }) => {
       [orgId, unidadeId, k.chave, k.pergunta, k.resposta, k.tags],
     );
   }
+
+  await sincronizarCatalogo(client, orgId, unidadeId);
 });
 
 console.log(
   `demo criada: ${DEMO.organizacao} / ${DEMO.unidade}: ${DEMO_QUARTOS.length} quartos, ${DEMO_HOSPEDES.length} hóspedes, ` +
-    `${DEMO_CONHECIMENTO.length} respostas na base`,
+    `${DEMO_CONHECIMENTO.length} respostas na base, ${DEMO_CATALOGO.length} itens no catálogo`,
 );
 console.log(`logins (senha = DEMO_SENHA): ${DEMO_PESSOAS.map((p) => email(p.usuario)).join(', ')}`);
 await pool.end();

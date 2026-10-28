@@ -334,3 +334,359 @@ export const DEMO_CONHECIMENTO: { chave: string; pergunta: string; resposta: str
     tags: ['idioma', 'ingles', 'espanhol', 'english', 'language'],
   },
 ];
+
+/**
+ * Catálogo do hotel: o que o hóspede pede (compra) ou agenda (agendamento) pelo chat do quarto.
+ *
+ * ATENÇÃO: preços, horários, durações e vagas são EXEMPLOS plausíveis para um 4 estrelas na Barra
+ * da Tijuca (out/2026), não a tabela do Wyndham. Conferir com o hotel antes de usar com hóspede
+ * real; tudo se edita depois em Administração → Catálogo.
+ *
+ * Grade: um horário começa em `inicio` e precisa TERMINAR até `fim` (início + duração ≤ fim).
+ * Passeio de saída única usa uma janela do tamanho exato da duração.
+ */
+export interface DemoItemCatalogo {
+  /** Chave do setor que entrega ou atende (configHotel.setores). */
+  setor: 'recepcao' | 'governanca' | 'manutencao' | 'alimentos_bebidas' | 'concierge';
+  tipo: 'compra' | 'agendamento';
+  categoria: string;
+  nome: string;
+  descricao: string;
+  nomes: { es: string; en: string };
+  descricoes?: { es?: string; en?: string };
+  /** Nulo: sem preço (cortesia ou sob consulta, como diz a descrição). */
+  precoCentavos: number | null;
+  porPessoa?: boolean;
+  maxQuantidade?: number;
+  duracaoMin?: number;
+  capacidade?: number | null;
+  vagasPor?: 'pessoa' | 'pedido';
+  horarios?: { dias: number[]; inicio: string; fim: string; intervaloMin: number }[];
+  antecedenciaMin?: number;
+  diasAFrente?: number;
+}
+
+const TODOS_OS_DIAS = [0, 1, 2, 3, 4, 5, 6];
+
+export const DEMO_CATALOGO: DemoItemCatalogo[] = [
+  // ---------- Room service (cozinha 24 h) ----------
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Club sandwich',
+    descricao: 'Pão de forma tostado, peito de frango, bacon, alface, tomate e maionese, com batata frita.',
+    nomes: { es: 'Club sándwich', en: 'Club sandwich' },
+    precoCentavos: 6800,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Hambúrguer da casa',
+    descricao: 'Blend bovino de 180 g, queijo prato, cebola caramelizada e molho da casa no pão brioche, com batata frita.',
+    nomes: { es: 'Hamburguesa de la casa', en: 'House burger' },
+    precoCentavos: 7400,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Salada caesar com frango',
+    descricao: 'Alface romana, frango grelhado, croutons, parmesão e molho caesar.',
+    nomes: { es: 'Ensalada César con pollo', en: 'Chicken Caesar salad' },
+    precoCentavos: 5800,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Prato executivo do dia',
+    descricao: 'Arroz, feijão, salada e a proteína do dia (peixe, frango ou carne). Pergunte qual é a de hoje.',
+    nomes: { es: 'Plato ejecutivo del día', en: 'Daily set meal' },
+    precoCentavos: 6900,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Porção de batata frita',
+    descricao: 'Batata frita crocante (400 g), com ketchup e maionese.',
+    nomes: { es: 'Porción de papas fritas', en: 'French fries' },
+    precoCentavos: 3200,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Água mineral ou refrigerante',
+    descricao: 'Água mineral 500 ml (com ou sem gás) ou refrigerante em lata. Diga qual na observação.',
+    nomes: { es: 'Agua mineral o refresco', en: 'Mineral water or soda' },
+    precoCentavos: 1000,
+    maxQuantidade: 12,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Cerveja long neck',
+    descricao: 'Cerveja long neck 355 ml, gelada. Venda para maiores de 18 anos.',
+    nomes: { es: 'Cerveza (botella)', en: 'Beer (bottle)' },
+    precoCentavos: 1600,
+    maxQuantidade: 12,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Vinho tinto chileno (garrafa)',
+    descricao: 'Garrafa de 750 ml de Cabernet Sauvignon chileno, com taças. Venda para maiores de 18 anos.',
+    nomes: { es: 'Vino tinto chileno (botella)', en: 'Chilean red wine (bottle)' },
+    precoCentavos: 16000,
+    maxQuantidade: 3,
+  },
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'compra',
+    categoria: 'Room service',
+    nome: 'Café da manhã no quarto',
+    descricao:
+      'O café incluído na diária, servido no quarto: pães, frios, frutas, iogurte, café e suco. Taxa de serviço por pessoa. Diga o horário (6h30 às 10h30) na observação.',
+    nomes: { es: 'Desayuno en la habitación', en: 'Breakfast in the room' },
+    descricoes: {
+      es: 'El desayuno incluido, servido en la habitación. Tarifa de servicio por persona. Indique la hora (6:30 a 10:30) en la observación.',
+      en: 'The included breakfast, served in your room. Service fee per person. Tell us the time (6:30 to 10:30 am) in the note.',
+    },
+    precoCentavos: 4500,
+    maxQuantidade: 6,
+  },
+
+  // ---------- Amenidades (governança, cortesia) ----------
+  {
+    setor: 'governanca',
+    tipo: 'compra',
+    categoria: 'Amenidades',
+    nome: 'Kit de higiene extra',
+    descricao: 'Sabonete, xampu, condicionador, escova e pasta de dente. Cortesia.',
+    nomes: { es: 'Kit de higiene adicional', en: 'Extra toiletries kit' },
+    precoCentavos: null,
+    maxQuantidade: 4,
+  },
+  {
+    setor: 'governanca',
+    tipo: 'compra',
+    categoria: 'Amenidades',
+    nome: 'Travesseiro extra',
+    descricao: 'Travesseiro adicional, firme ou macio (diga na observação). Cortesia.',
+    nomes: { es: 'Almohada adicional', en: 'Extra pillow' },
+    precoCentavos: null,
+    maxQuantidade: 4,
+  },
+  {
+    setor: 'governanca',
+    tipo: 'compra',
+    categoria: 'Amenidades',
+    nome: 'Ferro e tábua de passar',
+    descricao: 'Emprestados durante a estadia. Cortesia.',
+    nomes: { es: 'Plancha y tabla de planchar', en: 'Iron and ironing board' },
+    precoCentavos: null,
+    maxQuantidade: 1,
+  },
+  {
+    setor: 'governanca',
+    tipo: 'compra',
+    categoria: 'Amenidades',
+    nome: 'Berço',
+    descricao: 'Berço montado no quarto, com roupa de cama. Cortesia, sujeito à disponibilidade.',
+    nomes: { es: 'Cuna', en: 'Baby crib' },
+    precoCentavos: null,
+    maxQuantidade: 2,
+  },
+
+  // ---------- Hospedagem (recepção) ----------
+  {
+    setor: 'recepcao',
+    tipo: 'compra',
+    categoria: 'Hospedagem',
+    nome: 'Late checkout até 14h',
+    descricao: 'Fique no quarto até as 14h no dia da saída (o check-out normal é ao meio-dia). Sujeito à disponibilidade; a recepção confirma.',
+    nomes: { es: 'Late checkout hasta las 14:00', en: 'Late checkout until 2 pm' },
+    precoCentavos: 12000,
+    maxQuantidade: 1,
+  },
+  {
+    setor: 'recepcao',
+    tipo: 'compra',
+    categoria: 'Hospedagem',
+    nome: 'Late checkout até 18h',
+    descricao: 'Fique no quarto até as 18h no dia da saída. Sujeito à disponibilidade; a recepção confirma.',
+    nomes: { es: 'Late checkout hasta las 18:00', en: 'Late checkout until 6 pm' },
+    precoCentavos: 25000,
+    maxQuantidade: 1,
+  },
+
+  // ---------- Spa (concierge agenda; uma sala por horário) ----------
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Spa',
+    nome: 'Massagem relaxante (60 min)',
+    descricao: 'Massagem corporal com óleos aromáticos, para uma pessoa.',
+    nomes: { es: 'Masaje relajante (60 min)', en: 'Relaxing massage (60 min)' },
+    precoCentavos: 28000,
+    porPessoa: false,
+    maxQuantidade: 1,
+    duracaoMin: 60,
+    capacidade: 2,
+    vagasPor: 'pedido',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '10:00', fim: '20:00', intervaloMin: 60 }],
+    antecedenciaMin: 120,
+    diasAFrente: 14,
+  },
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Spa',
+    nome: 'Massagem a dois (60 min)',
+    descricao: 'Massagem relaxante para duas pessoas, lado a lado, na sala de casal. Preço pelo casal.',
+    nomes: { es: 'Masaje en pareja (60 min)', en: 'Couples massage (60 min)' },
+    precoCentavos: 52000,
+    porPessoa: false,
+    maxQuantidade: 2,
+    duracaoMin: 60,
+    capacidade: 1,
+    vagasPor: 'pedido',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '10:00', fim: '20:00', intervaloMin: 60 }],
+    antecedenciaMin: 120,
+    diasAFrente: 14,
+  },
+
+  // ---------- Passeios (concierge; preço por pessoa, van de 12 lugares) ----------
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Passeios',
+    nome: 'Cristo Redentor e Pão de Açúcar (meio dia)',
+    descricao: 'Van com guia bilíngue, saída e volta no hotel. Ingressos do trem do Corcovado e do bondinho incluídos.',
+    nomes: { es: 'Cristo Redentor y Pan de Azúcar (medio día)', en: 'Christ the Redeemer and Sugarloaf (half day)' },
+    descricoes: {
+      es: 'Van con guía bilingüe, salida y regreso en el hotel. Entradas del tren del Corcovado y del teleférico incluidas.',
+      en: 'Van with a bilingual guide, pickup and drop-off at the hotel. Corcovado train and cable car tickets included.',
+    },
+    precoCentavos: 39000,
+    porPessoa: true,
+    maxQuantidade: 8,
+    duracaoMin: 300,
+    capacidade: 12,
+    vagasPor: 'pessoa',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '08:00', fim: '13:00', intervaloMin: 300 }],
+    antecedenciaMin: 720,
+    diasAFrente: 30,
+  },
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Passeios',
+    nome: 'Trilha da Pedra Bonita',
+    descricao: 'Trilha leve de cerca de 1 h até a rampa de voo livre, com vista para a Barra e São Conrado. Guia e transporte incluídos.',
+    nomes: { es: 'Sendero de la Pedra Bonita', en: 'Pedra Bonita hike' },
+    precoCentavos: 22000,
+    porPessoa: true,
+    maxQuantidade: 8,
+    duracaoMin: 240,
+    capacidade: 12,
+    vagasPor: 'pessoa',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '07:00', fim: '11:00', intervaloMin: 240 }],
+    antecedenciaMin: 720,
+    diasAFrente: 30,
+  },
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Passeios',
+    nome: 'Angra dos Reis e Ilha Grande de escuna (dia inteiro)',
+    descricao: 'Transporte até Angra e passeio de escuna com paradas para mergulho. Almoço não incluído.',
+    nomes: { es: 'Angra dos Reis e Ilha Grande en goleta (día completo)', en: 'Angra dos Reis and Ilha Grande schooner trip (full day)' },
+    precoCentavos: 42000,
+    porPessoa: true,
+    maxQuantidade: 8,
+    duracaoMin: 720,
+    capacidade: 12,
+    vagasPor: 'pessoa',
+    horarios: [{ dias: [0, 2, 4, 6], inicio: '07:00', fim: '19:00', intervaloMin: 720 }],
+    antecedenciaMin: 1440,
+    diasAFrente: 30,
+  },
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Passeios',
+    nome: 'City tour pelo Centro Histórico',
+    descricao: 'Escadaria Selarón, Arcos da Lapa, Theatro Municipal, Confeitaria Colombo e Boulevard Olímpico, com guia.',
+    nomes: { es: 'City tour por el Centro Histórico', en: 'Historic downtown city tour' },
+    precoCentavos: 26000,
+    porPessoa: true,
+    maxQuantidade: 8,
+    duracaoMin: 300,
+    capacidade: 12,
+    vagasPor: 'pessoa',
+    horarios: [{ dias: [1, 2, 3, 4, 5, 6], inicio: '09:00', fim: '14:00', intervaloMin: 300 }],
+    antecedenciaMin: 720,
+    diasAFrente: 30,
+  },
+
+  // ---------- Transfer (concierge; preço por carro, até 4 pessoas) ----------
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Transfer',
+    nome: 'Transfer para o Aeroporto do Galeão',
+    descricao: 'Carro executivo do hotel ao Galeão (GIG), até 4 pessoas com bagagem. Preço por carro.',
+    nomes: { es: 'Traslado al Aeropuerto de Galeão', en: 'Transfer to Galeão Airport' },
+    precoCentavos: 25000,
+    porPessoa: false,
+    maxQuantidade: 4,
+    duracaoMin: 90,
+    capacidade: 2,
+    vagasPor: 'pedido',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '05:00', fim: '23:30', intervaloMin: 30 }],
+    antecedenciaMin: 240,
+    diasAFrente: 30,
+  },
+  {
+    setor: 'concierge',
+    tipo: 'agendamento',
+    categoria: 'Transfer',
+    nome: 'Transfer para o Aeroporto Santos Dumont',
+    descricao: 'Carro executivo do hotel ao Santos Dumont (SDU), até 4 pessoas com bagagem. Preço por carro.',
+    nomes: { es: 'Traslado al Aeropuerto Santos Dumont', en: 'Transfer to Santos Dumont Airport' },
+    precoCentavos: 21000,
+    porPessoa: false,
+    maxQuantidade: 4,
+    duracaoMin: 75,
+    capacidade: 2,
+    vagasPor: 'pedido',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '05:00', fim: '23:30', intervaloMin: 30 }],
+    antecedenciaMin: 240,
+    diasAFrente: 30,
+  },
+
+  // ---------- Restaurante ----------
+  {
+    setor: 'alimentos_bebidas',
+    tipo: 'agendamento',
+    categoria: 'Restaurante',
+    nome: 'Mesa para o jantar',
+    descricao: 'Reserva de mesa no restaurante do hotel. O consumo é cobrado à parte, na conta do quarto.',
+    nomes: { es: 'Mesa para la cena', en: 'Dinner table reservation' },
+    precoCentavos: null,
+    maxQuantidade: 10,
+    // Chegadas das 19h às 22h30, a cada 30 min; cada mesa conta 60 min na lotação de 40 lugares.
+    duracaoMin: 60,
+    capacidade: 40,
+    vagasPor: 'pessoa',
+    horarios: [{ dias: TODOS_OS_DIAS, inicio: '19:00', fim: '23:30', intervaloMin: 30 }],
+    antecedenciaMin: 60,
+    diasAFrente: 14,
+  },
+];

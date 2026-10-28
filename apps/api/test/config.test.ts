@@ -80,13 +80,16 @@ describe.skipIf(!temBanco)('editor de configuração', () => {
     expect(s.idioma).toBe('es');
     const tokRita = await A.login(A.h.pessoas.rita.email);
     expect((await A.req('POST', `/solicitacoes/${s.id}/triagem`, { setorId: A.h.setores.governanca }, tokRita)).status).toBe(200);
+    // O hóspede recebe a versão escrita em espanhol; a equipe lê o original em português.
     const enviado = await A.esperar(async () => {
-      const r = await A.consulta<{ texto: string }>(
-        `SELECT texto FROM mensagem WHERE solicitacao_id = $1 AND autor_tipo = 'sistema' AND texto LIKE '%Ama de llaves%'`,
+      const r = await A.consulta<{ original: string; texto: string }>(
+        `SELECT m.texto AS original, d.texto FROM mensagem m JOIN mensagem_derivado d ON d.mensagem_id = m.id AND d.tipo = 'traducao' AND d.idioma = 'es'
+          WHERE m.solicitacao_id = $1 AND m.autor_tipo = 'sistema' AND d.texto LIKE '%Ama de llaves%'`,
         [s.id],
       );
       return r[0];
     });
     expect(enviado.texto).toMatch(/^¡Listo!/);
+    expect(enviado.original).toMatch(/^Pronto! Seu pedido foi encaminhado para Governança/);
   });
 });

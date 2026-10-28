@@ -6,3 +6,4 @@ export * from './identificacao.js';
 export * from './textos.js';
 export * from './calibracao.js';
 export * from './fluxo.js';
+export * from './agenda.js';

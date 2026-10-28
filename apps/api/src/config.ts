@@ -49,11 +49,11 @@ const Esquema = z.object({
   OPENROUTER_API_KEY: vazioNulo,
   IA_MODELO_ROTEAMENTO: z.string().default('typesafe/jev-1.13'),
   IA_MODELO_ROTEAMENTO_ALTERNATIVO: vazioNulo,
-  IA_MODELO_TRADUCAO: z.string().default('google/gemini-3.1-flash-lite'),
+  IA_MODELO_TRADUCAO: z.string().default('minimax/minimax-m3.1-flash'),
   /** Reserva da tradução, usado quando o principal falha (limite do provedor, fora do ar). */
   IA_MODELO_TRADUCAO_ALTERNATIVO: vazioNulo,
-  IA_MODELO_RESPOSTA: z.string().default('google/gemini-3.5-flash-lite'),
-  IA_MODELO_MULTIMODAL: z.string().default('google/gemini-3.1-flash-lite'),
+  IA_MODELO_RESPOSTA: z.string().default('minimax/minimax-m3.1-flash'),
+  IA_MODELO_MULTIMODAL: z.string().default('xiaomi/mimo-v2.6-flash'),
   IA_CONFIANCA: z.enum(['logprobs', 'autoconsistencia']).default('autoconsistencia'),
   IA_AMOSTRAS: z.coerce.number().int().min(1).max(7).default(3),
   IA_SEM_RETENCAO: z
@@ -77,6 +77,15 @@ const Esquema = z.object({
   VAPID_PUBLICA: vazioNulo,
   VAPID_PRIVADA: vazioNulo,
   VAPID_CONTATO: z.string().default('mailto:contato@ramais.com.br'),
+
+  /** Reserva de hospedagem pela API de parceiros da VOA. Sem token, a reserva automática fica desligada. */
+  VOA_API_URL: z.string().default('https://rms.voahoteis.io'),
+  VOA_API_TOKEN: vazioNulo,
+  VOA_CHECKOUT_URL: z.string().default('https://book.salabim.ai'),
+  /** Valor exato do cabeçalho Authorization que a VOA manda no webhook de pagamento. */
+  VOA_WEBHOOK_SEGREDO: vazioNulo,
+  /** Validade do link de pagamento (a VOA usa 30 min se não pedirmos outra). */
+  VOA_LINK_MINUTOS: z.coerce.number().int().min(15).max(10_080).default(120),
 });
 
 export type Config = z.infer<typeof Esquema>;

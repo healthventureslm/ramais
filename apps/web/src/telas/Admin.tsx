@@ -21,6 +21,8 @@ import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { API, api } from '../api';
 import { avisar } from '../componentes/Avisos';
+import { CatalogoAdmin } from '../componentes/CatalogoAdmin';
+import { ReservasAdmin } from '../componentes/ReservasAdmin';
 import '../estilo/admin.css';
 import { Conhecimento } from './admin/Conhecimento';
 import { Equipe } from './admin/Equipe';
@@ -30,6 +32,8 @@ const ABAS = [
   { id: 'equipe', nome: 'Equipe' },
   { id: 'quartos', nome: 'Quartos e QR' },
   { id: 'conhecimento', nome: 'Base de conhecimento' },
+  { id: 'catalogo', nome: 'Catálogo' },
+  { id: 'reservas', nome: 'Reservas' },
   { id: 'automacao', nome: 'Automação da IA' },
   { id: 'aparelhos', nome: 'Celulares e hóspedes' },
 ] as const;
@@ -73,6 +77,8 @@ export function Admin({ unidadeId, unidadeNome, euId }: { unidadeId: string; uni
           {aba === 'equipe' && <Equipe unidadeId={unidadeId} euId={euId} />}
           {aba === 'quartos' && <Quartos unidadeId={unidadeId} unidadeNome={unidadeNome} />}
           {aba === 'conhecimento' && <Conhecimento unidadeId={unidadeId} />}
+          {aba === 'catalogo' && <CatalogoAdmin unidadeId={unidadeId} />}
+          {aba === 'reservas' && <ReservasAdmin unidadeId={unidadeId} />}
           {aba === 'automacao' && (
             <>
               <Automacao unidadeId={unidadeId} />

@@ -6,6 +6,16 @@ export function idiomaDosTextos(idioma: string | null | undefined): IdiomaFixo {
   return (IDIOMAS_FIXOS as readonly string[]).includes(base) ? (base as IdiomaFixo) : 'en';
 }
 
+/**
+ * Idioma em que o texto fixo é gravado: o do hóspede, se o texto existe nele (PT/ES/EN); senão
+ * português, e a saída traduz para o idioma dele. O original é o que a equipe lê no painel: um
+ * hóspede japonês recebe em japonês, e a equipe vê em português (não em inglês).
+ */
+export function idiomaDoOriginal(idioma: string | null | undefined): IdiomaFixo {
+  const base = (idioma ?? '').toLowerCase().slice(0, 2);
+  return (IDIOMAS_FIXOS as readonly string[]).includes(base) ? (base as IdiomaFixo) : 'pt';
+}
+
 /** Nome do setor no idioma de quem vai ler (hóspede); sem tradução, o nome em português. */
 export function nomeSetor(cfg: ConfigUnidade, chave: string, idioma: string | null | undefined, padrao?: string): string {
   const s = cfg.setores.find((x) => x.chave === chave);

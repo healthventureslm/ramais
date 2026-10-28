@@ -1,0 +1,23 @@
+/* ============================================================
+   Ramais — Administração → Catálogo
+   Só o que o DS não cobre: selos na linha do item, campos lado a
+   lado no formulário e o bloco de cada janela da grade. Só tokens.
+   ============================================================ */
+
+/* Selos (tipo e inativo) como a primeira parte do subtítulo: juntos, sem o separador do DS entre eles. */
+.catalogo-admin__selos { display: inline-flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; }
+.catalogo-admin__inativo .hv-listitem__title { color: var(--text-muted); }
+
+/* Dois campos lado a lado que viram uma coluna no celular. */
+.catalogo-admin__duplo { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: start; }
+
+/* Uma janela da grade de horários: dias, início, fim e intervalo. */
+.catalogo-admin__janela { display: grid; gap: var(--space-3); padding: var(--space-3); border: var(--border-hair) solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-sunken); }
+.catalogo-admin__campos { display: grid; gap: var(--space-2); grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+/* No celular o campo de hora não cabe em um terço: início e fim lado a lado, o intervalo embaixo. */
+@media (max-width: 480px) {
+  .catalogo-admin__campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalogo-admin__campos > :last-child { grid-column: 1 / -1; }
+}
+
+.catalogo-admin__erro { font: var(--type-caption); color: var(--danger-fg); }

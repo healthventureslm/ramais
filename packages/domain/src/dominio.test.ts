@@ -12,6 +12,7 @@ import {
   gatilhoPorPalavra,
   gatilhoVencedor,
   idiomaDosTextos,
+  idiomaDoOriginal,
   menorCarga,
   normalizar,
   ordenarFila,
@@ -299,6 +300,10 @@ describe('identificação', () => {
     expect(idiomaDosTextos('es')).toBe('es');
     expect(idiomaDosTextos('fr')).toBe('en');
     expect(idiomaDosTextos(null)).toBe('en');
+    // Gravado para a equipe ler: fora de PT/ES/EN, o original é português (a saída traduz).
+    expect(idiomaDoOriginal('ja')).toBe('pt');
+    expect(idiomaDoOriginal('es')).toBe('es');
+    expect(idiomaDoOriginal('en')).toBe('en');
   });
 });
 
