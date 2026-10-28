@@ -84,6 +84,8 @@ interface Analise {
   catalogo?: CatalogoItemView[];
   /** Há reserva de hospedagem ou pedido do catálogo em andamento nesta conversa. */
   fluxoAtivo?: boolean;
+  /** Há reserva de hospedagem em andamento (a IA segue nela mesmo com a conversa na equipe). */
+  reservaAtiva?: boolean;
   falhas: string[];
 }
 
@@ -440,8 +442,9 @@ export class Orquestrador {
       : null;
     const automacao = contexto.estado === 'automacao' || contexto.estado === 'resolvida';
     // Reserva de hospedagem: em andamento, toda mensagem passa pelo extrator; senão, só a que tem cara de reserva.
+    // Com a equipe, também: "ok, quero reservar de 20 a 22/11" no meio do atendimento entra na reserva.
     const lerReserva =
-      automacao && contexto.reserva.hotel !== null && Boolean(a.textoBase) && (contexto.reserva.ativa !== null || pareceReserva([a.textoBase, textoEn]));
+      contexto.reserva.hotel !== null && Boolean(a.textoBase) && (contexto.reserva.ativa !== null || pareceReserva([a.textoBase, textoEn]));
     // Pedido do catálogo pela conversa: em andamento, toda mensagem; senão, a que fala de cardápio, passeio, spa…
     const lerPedido =
       automacao &&
@@ -475,6 +478,7 @@ export class Orquestrador {
     a.pedido = pedido;
     a.catalogo = contexto.pedidos.itens;
     a.fluxoAtivo = contexto.reserva.ativa !== null || contexto.pedidos.carrinho !== null;
+    a.reservaAtiva = contexto.reserva.ativa !== null;
     // No meio de um atendimento, só quando o roteador vê um assunto novo ("qual a senha do Wi-Fi?"
     // enquanto a manutenção cuida da pia): "ok", "obrigado" e o próprio assunto não gastam a base.
     const assuntoNovo = !automacao && rot?.saida.assunto_novo && rot.confianca.assunto_novo >= contexto.cfg.limites.gatilho;
@@ -591,6 +595,15 @@ export class Orquestrador {
         if (gatilho) {
           await this.tratarGatilho(c, s, gatilho, rot, cfg.setorFallback, a);
           return;
+        }
+
+        // Reserva pedida no meio de um atendimento com a equipe ("ok, quero reservar de 20 a 22/11 para
+        // 2"): com datas, a IA assume a reserva e a conversa continua com a pessoa, que vê tudo nas notas.
+        const comEquipe = s.estado !== 'automacao' && s.estado !== 'resolvida';
+        const pedeComDatas = Boolean(a.reserva?.querReservar && (a.reserva.checkIn || a.reserva.checkOut || a.reserva.noites));
+        if (comEquipe && a.reserva !== undefined && (a.reservaAtiva || pedeComDatas)) {
+          if (s.estado === 'aguardando_solicitante') s = await this.acoes.transicionar(c, s, 'solicitante_respondeu');
+          if (await this.reservas.tratar(c, s, a.reserva, a.conhecimento, cfg.limites.respostaAutomatica, a.textoBase)) return;
         }
 
         if (novo && rot && (await this.assuntoNovo(c, s, a, rot, decisaoId, p.mensagemId))) return;

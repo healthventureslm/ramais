@@ -90,6 +90,9 @@ describe.skipIf(!temBanco)('cobrança por link, mais noites e chat do hotel', ()
       disponivel: true,
       extrair: async (texto: string) => {
         if (/ficar mais 2 noites/i.test(texto)) return { ...nadaReserva, querReservar: true, sobreReserva: true, estender: true, noites: 2 };
+        if (/aumento da minha reserva em 3 dias/i.test(texto)) return { ...nadaReserva, querReservar: true, sobreReserva: true, estender: true, noites: 3 };
+        if (/Amanhã, dia X/.test(texto)) return { ...nadaReserva, sobreReserva: true, checkIn: dia(0), checkOut: dia(1) };
+        if (/^Confirma$/.test(texto)) return { ...nadaReserva, sobreReserva: true, checkIn: dia(1), checkOut: dia(2), sim: true };
         if (/reservar um quarto/i.test(texto)) return { ...nadaReserva, querReservar: true, sobreReserva: true, checkIn: dia(20), checkOut: dia(22), adultos: 2, criancas: 0 };
         return { ...nadaReserva };
       },
@@ -239,6 +242,52 @@ describe.skipIf(!temBanco)('cobrança por link, mais noites e chat do hotel', ()
     c = await conta();
     expect(c.aPagarCentavos).toBe(0);
     expect(c.itens.at(-1)).toMatchObject({ situacao: 'aguardando', link: r.link });
+  }, 90_000);
+
+  it('mais noites sem lista de hóspedes: "amanhã, dia X" é o check-out de hoje, e "Confirma" manda o link', async () => {
+    await A.consulta('DELETE FROM hospede_ativo WHERE local_id = $1', [A.h.localId]);
+    expect(await falar(tokenQuarto, 'Quero fazer um aumento da minha reserva em 3 dias')).toBe(
+      'Claro! Qual é o dia do seu check-out hoje? Aí eu vejo as 3 noites a mais.',
+    );
+    // A IA leu "Amanhã, dia X" como hoje → amanhã; o pedido era 3 noites a partir do check-out.
+    expect(await falar(tokenQuarto, 'Amanhã, dia X')).toMatch(new RegExp(`^Dá para ficar até ${dm(dia(4))}: 3 noites a mais`));
+    // E reescreveu as datas junto com o "Confirma": vale o sim, sai o link.
+    expect(await falar(tokenQuarto, 'Confirma')).toMatch(new RegExp(`^Perfeito! 3 noites a mais, de ${dm(dia(1))} a ${dm(dia(4))}`));
+  }, 90_000);
+
+  it('no meio de um atendimento com a equipe, pedir quarto com datas entra na reserva e a conversa fica com a equipe', async () => {
+    const r = await fetch(`${A.base}/chat/setor`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-chat': tokenQuarto }, body: JSON.stringify({ chave: 'recepcao' }) });
+    expect(r.status).toBe(200);
+    await proxima(tokenQuarto); // "Pronto! Seu pedido foi encaminhado para Recepção…"
+    const opcoes = await falar(tokenQuarto, 'Ok, quero reservar um quarto');
+    expect(opcoes).toMatch(/^Encontrei estas opções de .* para 2 adultos/);
+    const [s] = await A.consulta<{ id: string; estado: string; setor: string }>(
+      `SELECT s.id, s.estado, st.chave AS setor FROM solicitacao s JOIN setor st ON st.id = s.setor_id JOIN reserva_hospedagem r ON r.solicitacao_id = s.id
+        WHERE s.unidade_id = $1 AND r.tipo = 'nova' ORDER BY r.criado_em DESC LIMIT 1`,
+      [A.h.unidadeId],
+    );
+    // A conversa continua na fila da recepção; a equipe vê que a IA assumiu a reserva.
+    expect(s).toMatchObject({ setor: 'recepcao' });
+    expect(['na_fila', 'oferecida']).toContain(s!.estado);
+    const notas = await A.consulta<{ texto: string }>(`SELECT texto FROM mensagem WHERE solicitacao_id = $1 AND visibilidade = 'interna'`, [s!.id]);
+    expect(notas.map((n) => n.texto).join('\n')).toContain('O hóspede pediu uma reserva com datas no meio do atendimento: a IA assumiu');
+
+    // A atendente responde: dali em diante a reserva é com ela, a IA para.
+    const tokRita = await A.login(A.h.pessoas.rita.email);
+    expect((await A.req('POST', `/solicitacoes/${s!.id}/pegar`, undefined, tokRita)).status).toBe(200);
+    expect((await A.req('POST', `/solicitacoes/${s!.id}/mensagens`, { texto: 'Oi! Eu sigo com a sua reserva.', visibilidade: 'externa' }, tokRita)).status).toBe(201);
+    await proxima(tokenQuarto);
+    await fetch(`${A.base}/chat/mensagens`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-chat': tokenQuarto }, body: JSON.stringify({ id: randomUUID(), texto: '1' }) });
+    const [parou] = await A.esperar(async () => {
+      const x = await A.consulta<{ estado: string }>(`SELECT estado FROM reserva_hospedagem WHERE solicitacao_id = $1 AND estado = 'desistiu'`, [s!.id]);
+      return x.length ? x : null;
+    });
+    expect(parou).toMatchObject({ estado: 'desistiu' });
+    const depois = await A.consulta<{ autor_tipo: string; texto: string }>(
+      `SELECT autor_tipo, texto FROM mensagem WHERE solicitacao_id = $1 AND visibilidade = 'externa' ORDER BY criado_em DESC LIMIT 1`,
+      [s!.id],
+    );
+    expect(depois[0]).toMatchObject({ autor_tipo: 'solicitante', texto: '1' });
   }, 90_000);
 
   it('QR do hotel: o visitante conversa sem quarto, cada sessão é uma conversa, e reserva sem identificação', async () => {

@@ -47,6 +47,7 @@ export interface ReservaRow {
   tipo: 'nova' | 'extensao';
   extensao: { cotacao: CotacaoExtensao['data']; confirmacao?: ConfirmacaoExtensao['data'] } | null;
   cobranca_id: string | null;
+  criado_em: Date;
 }
 
 /** Aviso de pagamento da VOA (webhook). */
@@ -207,6 +208,19 @@ export class Reservas implements OnModuleInit {
     texto = '',
   ): Promise<boolean> {
     let r = await this.ativa(c, s.id);
+    const comEquipe = s.estado !== 'automacao' && s.estado !== 'resolvida';
+    // No meio de um atendimento, a equipe respondeu depois que a IA assumiu: a pessoa cuida da reserva.
+    if (r && comEquipe) {
+      const respondeu = await c.tx.client.query(
+        `SELECT 1 FROM mensagem WHERE solicitacao_id = $1 AND autor_tipo = 'pessoa' AND visibilidade = 'externa' AND criado_em > $2 LIMIT 1`,
+        [s.id, r.criado_em],
+      );
+      if (respondeu.rowCount) {
+        await this.mudar(c, r, { estado: 'desistiu' });
+        await this.acoes.notaInterna(c, s.id, 'Reserva automática parou: a equipe respondeu ao hóspede e segue com a reserva.', { tipo: 'sistema' });
+        return false;
+      }
+    }
     // Respostas óbvias valem sem depender da IA: o número da opção, o nome do titular.
     if (r) {
       const direta = this.respostaDireta(r, ex ?? VAZIA, texto);
@@ -226,9 +240,11 @@ export class Reservas implements OnModuleInit {
       await this.acoes.notaInterna(
         c,
         s.id,
-        tipo === 'extensao'
-          ? 'Mais noites na estadia: a IA está atendendo (cotação na VOA e link de pagamento).'
-          : 'Reserva de hospedagem automática: a IA está atendendo (busca na VOA e link de pagamento).',
+        comEquipe
+          ? `O hóspede pediu ${tipo === 'extensao' ? 'mais noites' : 'uma reserva'} com datas no meio do atendimento: a IA assumiu (${tipo === 'extensao' ? 'cotação' : 'busca'} na VOA e link de pagamento). A conversa continua com você; se responder ao hóspede, a IA para.`
+          : tipo === 'extensao'
+            ? 'Mais noites na estadia: a IA está atendendo (cotação na VOA e link de pagamento).'
+            : 'Reserva de hospedagem automática: a IA está atendendo (busca na VOA e link de pagamento).',
         { tipo: 'sistema' },
       );
       await this.nucleo.evento(c, { solicitacaoId: s.id, tipo: 'reserva_iniciada', atorTipo: 'ia', dados: { reserva: r.id } });
@@ -252,6 +268,12 @@ export class Reservas implements OnModuleInit {
       await this.mudar(c, r, { estado: 'desistiu' });
       await this.acoes.notaInterna(c, s.id, 'Reserva automática interrompida: o hóspede mudou de assunto.', { tipo: 'sistema' });
       return false;
+    }
+
+    // "Sim", "Confirma" à cotação não mexe nas datas: a IA às vezes as reescreve junto com o sim, e a
+    // cotação era refeita em vez de mandar o link. Datas novas vêm com número ("não, até dia 2").
+    if (ex && r.estado === 'cotada' && SIM.test(texto.trim()) && !/\d/.test(texto)) {
+      ex = { ...ex, checkIn: null, checkOut: null, noites: null, sim: true, sobreReserva: true };
     }
 
     // Junta o que a mensagem trouxe ao que já se sabia.
@@ -368,7 +390,7 @@ export class Reservas implements OnModuleInit {
       busca: { id: busca.id, expira: busca.expira, opcoes, checkIn: p.checkIn!, checkOut: p.checkOut!, quartos },
       escolha: null,
     });
-    await this.acoes.atualizar(c, s, { resumo: `Reserva de hospedagem ${periodo} (${noites} ${noites === 1 ? 'noite' : 'noites'}), ${pessoasTexto(p)}` });
+    await this.resumir(c, s, `Reserva de hospedagem ${periodo} (${noites} ${noites === 1 ? 'noite' : 'noites'}), ${pessoasTexto(p)}`);
     await this.acoes.notaInterna(c, s.id, `Reserva: ${opcoes.length} opções mostradas ${periodo} para ${pessoasTexto(p)}.`, { tipo: 'sistema' });
     const lista = opcoes.map((o) => `${o.n}. ${descreverOpcao(o)}`).join('\n');
     await this.perguntar(
@@ -497,7 +519,7 @@ export class Reservas implements OnModuleInit {
       if (booking === 'CONFIRMED' && definitivo) {
         await this.falar(c, s, `Pagamento confirmado! Sua reserva está garantida: ${resumo}. Código da reserva: ${codigo}.${r.titular_email ? ' A confirmação também foi para o seu e-mail.' : ''}`);
         await this.acoes.notaInterna(c, s.id, `Reserva PAGA e confirmada no hotel: ${codigo} · ${resumo} · ${r.total ? brl(Number(r.total)) : ''}.`, { tipo: 'sistema' });
-        await this.acoes.atualizar(c, s, { resumo: `Reserva paga: ${codigo} · ${resumo}` });
+        await this.resumir(c, s, `Reserva paga: ${codigo} · ${resumo}`);
         await this.avisarRecepcao(c, s, `Reserva paga pelo Ramais: ${codigo}`, `${resumo} · ${r.titular_nome ?? ''}`);
       } else {
         await this.falar(c, s, 'Pagamento aprovado! Estamos finalizando a sua reserva no hotel e já te mando o código definitivo.');
@@ -549,9 +571,13 @@ export class Reservas implements OnModuleInit {
       if (p.checkOut && p.checkOut <= atual) p.checkOut = null;
       r = await this.mudar(c, r, { pedido: p });
     } else if (!atual && r.ultima_pergunta?.startsWith(PERGUNTA_CHECKOUT_HOJE)) {
-      // Sem lista de hóspedes, perguntamos o check-out de hoje: uma data só na resposta é ele
-      // (mesmo que a IA a leia como saída). Com duas, valem como vieram.
-      const dita = ex?.checkIn && ex.checkOut ? null : (ex?.checkIn ?? ex?.checkOut ?? null);
+      // Sem lista de hóspedes, perguntamos o check-out de hoje: a data dita é ele, mesmo que a IA a
+      // leia como saída ou invente "hoje" como entrada ("Amanhã, dia 29" virava 28 → 29, 1 noite).
+      // Duas datas só valem como vieram se fecham com as noites pedidas, ou se não houve número de
+      // noites ("meu check-out é dia 30 e quero ficar até dia 2").
+      const duas = Boolean(ex?.checkIn && ex.checkOut);
+      const fecham = duas && (!p.noites || noitesEntre(ex!.checkIn!, ex!.checkOut!) === p.noites);
+      const dita = fecham ? null : (ex?.checkOut ?? ex?.checkIn ?? null);
       if (dita) {
         p = { ...p, checkIn: dita, checkOut: p.noites ? somarDias(dita, p.noites) : null };
         r = await this.mudar(c, r, { pedido: p });
@@ -607,7 +633,7 @@ export class Reservas implements OnModuleInit {
     const n = d.extension.nights;
     r = await this.mudar(c, r, { estado: 'cotada', extensao: { cotacao: d }, total: d.total });
     const comoPaga = this.cobrancas.disponivel ? 'Confirmando, mando o link para pagar por Pix ou cartão.' : 'O valor vai para a conta do quarto.';
-    await this.acoes.atualizar(c, s, { resumo: `Mais noites: até ${dm(d.extension.check_out)} (${n} ${n === 1 ? 'noite' : 'noites'}) · ${brl(d.total)}` });
+    await this.resumir(c, s, `Mais noites: até ${dm(d.extension.check_out)} (${n} ${n === 1 ? 'noite' : 'noites'}) · ${brl(d.total)}`);
     await this.acoes.notaInterna(c, s.id, `Mais noites: cotação de ${dm(d.extension.check_in)} a ${dm(d.extension.check_out)}, ${d.room?.name ?? 'quarto'}, ${brl(d.total)} (simulada: a VOA ainda não tem a rota de extensão).`, { tipo: 'sistema' });
     await this.perguntar(
       c,
@@ -731,7 +757,7 @@ export class Reservas implements OnModuleInit {
       `Estadia estendida até ${dm(novo)} (${n} ${n === 1 ? 'noite' : 'noites'})${quarto ? `, quarto ${quarto}` : ''} · ${brl(pagamento.valorCentavos / 100)} ${pagamento.provedor === 'salabim_pay' ? 'pago por link' : 'na conta do quarto'}. Confirmação ${conf.data.booking_id}${conf.data.simulated ? ' (simulada)' : ''}.`,
       { tipo: 'sistema' },
     );
-    await this.acoes.atualizar(c, await this.acoes.carregar(c, s.id), { resumo: `Estadia estendida até ${dm(novo)}${quarto ? ` · quarto ${quarto}` : ''}` });
+    await this.resumir(c, s, `Estadia estendida até ${dm(novo)}${quarto ? ` · quarto ${quarto}` : ''}`);
     await this.avisarRecepcao(c, s, `Estadia estendida${quarto ? `: quarto ${quarto}` : ''}`, `Check-out agora em ${dm(novo)} · ${brl(pagamento.valorCentavos / 100)}`);
   }
 
@@ -791,10 +817,19 @@ export class Reservas implements OnModuleInit {
     return q.rows[0]!;
   }
 
+  /**
+   * O resumo é o que a equipe lê na lista. Numa conversa que está com uma pessoa (a reserva entrou
+   * no meio do atendimento), o resumo é dela e não muda.
+   */
+  private async resumir(c: Ctx, s: SolicitacaoRow, resumo: string): Promise<SolicitacaoRow> {
+    const atual = await this.acoes.carregar(c, s.id);
+    if (atual.estado !== 'automacao' && atual.estado !== 'resolvida') return atual;
+    return this.acoes.atualizar(c, atual, { resumo });
+  }
+
   /** O atendimento automático terminou (link enviado ou desistência): resolve a solicitação. */
   private async concluir(c: Ctx, s: SolicitacaoRow, resumo: string) {
-    const atual = await this.acoes.carregar(c, s.id);
-    const com = await this.acoes.atualizar(c, atual, { resumo });
+    const com = await this.resumir(c, s, resumo);
     if (com.estado === 'automacao') await this.acoes.resolver(c, com, { tipo: 'ia' });
   }
 
