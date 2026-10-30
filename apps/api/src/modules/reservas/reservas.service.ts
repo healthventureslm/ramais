@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { ContextoReserva, ExtracaoReserva, ServicosIA } from '@ramais/ai';
+import type { CartaoMensagem, CartaoTarifa } from '@ramais/contracts';
 import { dataLocal, diaDaSemana } from '@ramais/domain';
 import type { Config } from '../../config.js';
 import { Nucleo, type Ctx } from '../../infra/nucleo.js';
@@ -23,7 +24,18 @@ export interface PedidoReserva {
 }
 
 interface OpcaoMostrada extends TarifaVoa {
+  /** Número da tarifa dentro do quarto (o que o hóspede responde). */
   n: number;
+  /** Número do quarto na lista de quartos. Sem ele (buscas antigas), a lista era só de tarifas. */
+  sala?: number;
+}
+
+/** Um tipo de quarto mostrado no cartão (as tarifas dele estão em `opcoes`). */
+interface SalaMostrada {
+  n: number;
+  quartoId: number;
+  nome: string;
+  foto: string | null;
 }
 
 export interface ReservaRow {
@@ -33,7 +45,17 @@ export interface ReservaRow {
   voa_hotel_id: number;
   estado: string;
   pedido: PedidoReserva;
-  busca: { id: string; expira: string | null; opcoes: OpcaoMostrada[]; checkIn: string; checkOut: string; quartos: QuartoBusca[] } | null;
+  busca: {
+    id: string;
+    expira: string | null;
+    opcoes: OpcaoMostrada[];
+    checkIn: string;
+    checkOut: string;
+    quartos: QuartoBusca[];
+    salas?: SalaMostrada[];
+    /** O quarto cujas tarifas estão na tela. */
+    sala?: number | null;
+  } | null;
   escolha: OpcaoMostrada | null;
   titular_nome: string | null;
   titular_email: string | null;
@@ -64,7 +86,7 @@ export interface EventoVoa {
   paid_at?: string | null;
 }
 
-const ATIVOS = ['coletando', 'opcoes', 'titular', 'cotada'];
+const ATIVOS = ['coletando', 'opcoes', 'tarifas', 'titular', 'cotada'];
 const VAZIA: ExtracaoReserva = {
   querReservar: false,
   sobreReserva: false,
@@ -87,7 +109,12 @@ const SIM = /^(sim|s|ok|okay|pode|pode sim|confirmo|confirma|confirmado|isso|cla
 /** Mais noites sem lista de hóspedes: o hotel não sabe o check-out de hoje e pergunta. */
 const PERGUNTA_CHECKOUT_HOJE = 'Claro! Qual é o dia do seu check-out hoje';
 const DIAS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MAX_OPCOES = 6;
+const MAX_QUARTOS = 6;
+const MAX_TARIFAS = 6;
+/** Botões do resumo e das tarifas ("Trocar tarifa", "Change room"…). */
+const TROCAR_TARIFA = /^(trocar|mudar|outra|change|other|cambiar|otra)\b.{0,12}\b(tarifa|rate)\b/i;
+const TROCAR_QUARTO = /^(trocar|mudar|outro|change|other|cambiar|otra)\b.{0,12}\b(quarto|room|habitaci[oó]n)/i;
+const CAFE = /BREAKFAST|MEAL|PENSION|ALL_INCLUSIVE/i;
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -115,13 +142,50 @@ function ocupacao(p: PedidoReserva): QuartoBusca[] {
   return quartos;
 }
 
+function cancelamentoTexto(o: TarifaVoa): string {
+  return o.cancelavel ? (o.cancelamentoAte ? `cancelamento grátis até ${dm(o.cancelamentoAte)}` : 'com cancelamento') : 'não reembolsável';
+}
+
 function descreverOpcao(o: TarifaVoa): string {
-  const cancel = o.cancelavel
-    ? o.cancelamentoAte
-      ? `cancelamento grátis até ${dm(o.cancelamentoAte)}`
-      : 'com cancelamento'
-    : 'não reembolsável';
-  return `${o.quartoNome}, ${o.regimeNome.toLowerCase()}: ${brl(o.total)} (${cancel})`;
+  return `${o.quartoNome}, ${o.regimeNome.toLowerCase()}: ${brl(o.total)} (${cancelamentoTexto(o)})`;
+}
+
+/** Uma tarifa dentro do quarto (o nome do quarto já está no título). */
+function descreverTarifa(o: TarifaVoa): string {
+  return `${o.tarifaNome}: ${brl(o.total)} (${o.regimeNome.toLowerCase()}, ${cancelamentoTexto(o)})`;
+}
+
+function descreverSala(sala: SalaMostrada, tarifas: TarifaVoa[]): string {
+  const extras = [
+    `${tarifas.length} ${tarifas.length === 1 ? 'tarifa' : 'tarifas'}`,
+    ...(tarifas.some((t) => CAFE.test(t.regime)) ? ['com café da manhã'] : []),
+    ...(tarifas.some((t) => t.cancelavel) ? ['opção com cancelamento grátis'] : []),
+  ];
+  return `${sala.nome}: a partir de ${brl(Math.min(...tarifas.map((t) => t.total)))} (${extras.join(', ')})`;
+}
+
+function cartaoTarifa(o: OpcaoMostrada): CartaoTarifa {
+  return { n: o.n, nome: o.tarifaNome, regime: o.regime, cafe: CAFE.test(o.regime), cancelavel: o.cancelavel, cancelamentoAte: o.cancelamentoAte, total: o.total };
+}
+
+function estadia(b: NonNullable<ReservaRow['busca']>, p: PedidoReserva) {
+  return {
+    checkIn: b.checkIn,
+    checkOut: b.checkOut,
+    noites: noitesEntre(b.checkIn, b.checkOut),
+    adultos: b.quartos.reduce((s, q) => s + q.adultos, 0),
+    criancas: b.quartos.reduce((s, q) => s + q.idadesCriancas.length, 0),
+    quartos: Math.max(1, p.quartos ?? b.quartos.length),
+  };
+}
+
+/** "1. Standard Solteiro" (botão do cartão), "2", "opção 2", ou o nome exato de uma das opções. */
+function numeroEscolhido(texto: string, nomes: { n: number; nome: string }[]): number | null {
+  const t = texto.trim();
+  const n = /^(?:op[cç][aã]o\s*|option\s*|opci[oó]n\s*)?(\d{1,2})(?:[.)!:-]\s*.*)?$/is.exec(t)?.[1];
+  if (n) return Number(n);
+  const norm = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return nomes.find((o) => norm(o.nome) === norm(t))?.n ?? null;
 }
 
 /**
@@ -180,9 +244,21 @@ export class Reservas implements OnModuleInit {
       hoje,
       diaSemana: DIAS[diaDaSemana(hoje)]!,
       conhecido: r ? { ...r.pedido } : null,
-      opcoes: r?.estado === 'opcoes' ? (r.busca?.opcoes ?? []).map(descreverOpcao) : undefined,
+      opcoes: this.opcoesNaTela(r),
       pergunta: r?.ultima_pergunta ?? null,
     };
+  }
+
+  /** O que está na tela para o hóspede escolher, numerado como ele vê. */
+  private opcoesNaTela(r: ReservaRow | null): string[] | undefined {
+    const b = r?.busca;
+    if (!r || !b) return undefined;
+    if (r.estado === 'opcoes') {
+      if (!b.salas) return b.opcoes.map(descreverOpcao);
+      return b.salas.map((sala) => descreverSala(sala, b.opcoes.filter((o) => o.sala === sala.n)));
+    }
+    if (r.estado === 'tarifas') return b.opcoes.filter((o) => o.sala === b.sala).map(descreverTarifa);
+    return undefined;
   }
 
   /** A mensagem é sobre reservar hospedagem? Na dúvida a IA diz (o filtro barato vem antes). */
@@ -306,32 +382,70 @@ export class Reservas implements OnModuleInit {
     if (ex?.nome) r = await this.mudar(c, r, { titular_nome: ex.nome });
     if (ex?.email) r = await this.mudar(c, r, { titular_email: ex.email });
 
-    // Escolha de uma opção.
+    // Botões "Trocar tarifa" e "Trocar quarto" (no resumo e nas tarifas): volta um passo.
+    const b = r.busca;
+    if (b?.salas && !mudouPedido && ['tarifas', 'titular'].includes(r.estado)) {
+      const naSala = b.opcoes.filter((o) => o.sala === b.sala).length;
+      if (TROCAR_QUARTO.test(texto.trim()) || (TROCAR_TARIFA.test(texto.trim()) && naSala < 2)) {
+        r = await this.mudar(c, r, { estado: 'opcoes', escolha: null, busca: { ...b, sala: null } });
+        await this.mostrarQuartos(c, s, r);
+        return true;
+      }
+      if (TROCAR_TARIFA.test(texto.trim())) {
+        r = await this.mudar(c, r, { estado: 'tarifas', escolha: null });
+        await this.mostrarTarifas(c, s, r);
+        return true;
+      }
+    }
+
+    // Escolha do quarto (e, se ele tem uma tarifa só, da tarifa).
+    let escolheuAgora = false;
     if (r.estado === 'opcoes' && !mudouPedido) {
+      const b2 = r.busca!;
       const n = ex?.escolha;
-      const opcao = n ? r.busca?.opcoes.find((o) => o.n === n) : null;
+      if (b2.salas) {
+        const sala = n ? b2.salas.find((x) => x.n === n) : null;
+        if (!sala) {
+          await this.perguntar(c, s, r, `Qual quarto você prefere? Responda com o número (de 1 a ${b2.salas.length}).`);
+          return true;
+        }
+        const tarifas = b2.opcoes.filter((o) => o.sala === sala.n);
+        if (tarifas.length > 1) {
+          r = await this.mudar(c, r, { estado: 'tarifas', busca: { ...b2, sala: sala.n } });
+          await this.mostrarTarifas(c, s, r);
+          return true;
+        }
+        r = await this.mudar(c, r, { escolha: tarifas[0], estado: 'titular', busca: { ...b2, sala: sala.n } });
+      } else {
+        // Busca de antes dos cartões: a lista era de tarifas.
+        const opcao = n ? b2.opcoes.find((o) => o.n === n) : null;
+        if (!opcao) {
+          await this.perguntar(c, s, r, `Qual das opções você prefere? Responda com o número (de 1 a ${b2.opcoes.length}).`);
+          return true;
+        }
+        r = await this.mudar(c, r, { escolha: opcao, estado: 'titular' });
+      }
+      escolheuAgora = true;
+    }
+
+    // Escolha da tarifa do quarto.
+    if (r.estado === 'tarifas' && !mudouPedido) {
+      const b2 = r.busca!;
+      const n = ex?.escolha;
+      const opcao = n ? b2.opcoes.find((o) => o.sala === b2.sala && o.n === n) : null;
       if (!opcao) {
-        await this.perguntar(c, s, r, `Qual das opções você prefere? Responda com o número (de 1 a ${r.busca?.opcoes.length ?? 1}).`);
+        const total = b2.opcoes.filter((o) => o.sala === b2.sala).length;
+        await this.perguntar(c, s, r, `Qual tarifa você prefere? Responda com o número (de 1 a ${total}).`);
         return true;
       }
       r = await this.mudar(c, r, { escolha: opcao, estado: 'titular' });
+      escolheuAgora = true;
     }
 
     if (r.estado === 'titular' && !mudouPedido) {
-      if (!r.titular_nome) {
-        const nome = await this.nomeConhecido(c, s);
-        if (nome) r = await this.mudar(c, r, { titular_nome: nome });
-      }
-      if (!r.titular_nome) {
-        await this.perguntar(
-          c,
-          s,
-          r,
-          'Ótima escolha! Para emitir o link de pagamento, qual o nome completo do titular da reserva? Se quiser receber a confirmação por e-mail, mande o e-mail também.',
-        );
-        return true;
-      }
-      await this.gerarLink(c, s, r);
+      // Acabou de escolher: o resumo com diárias, impostos e total, antes de pedir o titular.
+      if (escolheuAgora && r.busca?.salas) await this.mostrarResumo(c, s, r);
+      await this.pedirTitular(c, s, r);
       return true;
     }
 
@@ -362,6 +476,26 @@ export class Reservas implements OnModuleInit {
     return true;
   }
 
+  /** Escolhido o quarto e a tarifa: o nome do titular (se ainda não sabemos) e o link. */
+  private async pedirTitular(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
+    if (!r.titular_nome) {
+      const nome = await this.nomeConhecido(c, s);
+      if (nome) r = await this.mudar(c, r, { titular_nome: nome });
+    }
+    if (!r.titular_nome) {
+      await this.perguntar(
+        c,
+        s,
+        r,
+        r.busca?.salas
+          ? 'Para gerar o link de pagamento, me diga o nome completo do titular da reserva. Se quiser receber a confirmação por e-mail, mande o e-mail também.'
+          : 'Ótima escolha! Para emitir o link de pagamento, qual o nome completo do titular da reserva? Se quiser receber a confirmação por e-mail, mande o e-mail também.',
+      );
+      return;
+    }
+    await this.gerarLink(c, s, r);
+  }
+
   private async buscar(c: Ctx, s: SolicitacaoRow, r: ReservaRow, p: PedidoReserva) {
     const quartos = ocupacao(p);
     let busca;
@@ -383,22 +517,102 @@ export class Reservas implements OnModuleInit {
       );
       return;
     }
-    const opcoes: OpcaoMostrada[] = busca.tarifas.slice(0, MAX_OPCOES).map((t, i) => ({ ...t, n: i + 1 }));
+    // Agrupa por tipo de quarto, do mais barato ao mais caro (as tarifas já vêm em ordem de preço).
+    const grupos = new Map<number, TarifaVoa[]>();
+    for (const t of busca.tarifas) grupos.set(t.quartoId, [...(grupos.get(t.quartoId) ?? []), t]);
+    const lista = [...grupos.values()].slice(0, MAX_QUARTOS);
+    const salas: SalaMostrada[] = lista.map((g, i) => ({ n: i + 1, quartoId: g[0]!.quartoId, nome: g[0]!.quartoNome, foto: g.find((t) => t.foto)?.foto ?? null }));
+    const opcoes: OpcaoMostrada[] = lista.flatMap((g, i) => g.slice(0, MAX_TARIFAS).map((t, j) => ({ ...t, n: j + 1, sala: i + 1 })));
     const noites = opcoes[0]!.noites;
+    // Um quarto só: vai direto às tarifas dele.
+    const so = salas.length === 1;
     r = await this.mudar(c, r, {
-      estado: 'opcoes',
-      busca: { id: busca.id, expira: busca.expira, opcoes, checkIn: p.checkIn!, checkOut: p.checkOut!, quartos },
+      estado: so ? 'tarifas' : 'opcoes',
+      busca: { id: busca.id, expira: busca.expira, opcoes, checkIn: p.checkIn!, checkOut: p.checkOut!, quartos, salas, sala: so ? 1 : null },
       escolha: null,
     });
     await this.resumir(c, s, `Reserva de hospedagem ${periodo} (${noites} ${noites === 1 ? 'noite' : 'noites'}), ${pessoasTexto(p)}`);
-    await this.acoes.notaInterna(c, s.id, `Reserva: ${opcoes.length} opções mostradas ${periodo} para ${pessoasTexto(p)}.`, { tipo: 'sistema' });
-    const lista = opcoes.map((o) => `${o.n}. ${descreverOpcao(o)}`).join('\n');
-    await this.perguntar(
+    await this.acoes.notaInterna(
       c,
-      s,
-      r,
-      `Encontrei estas opções ${periodo} (${noites} ${noites === 1 ? 'noite' : 'noites'}) para ${pessoasTexto(p)}. Os valores são o total da estadia, com impostos:\n${lista}\n\nResponda com o número da opção que você prefere.`,
+      s.id,
+      `Reserva: ${salas.length} ${salas.length === 1 ? 'tipo de quarto' : 'tipos de quarto'} (${opcoes.length} ${opcoes.length === 1 ? 'tarifa' : 'tarifas'}) mostrados ${periodo} para ${pessoasTexto(p)}.`,
+      { tipo: 'sistema' },
     );
+    // Um quarto com uma tarifa só: não há o que escolher, vai ao resumo.
+    if (so && opcoes.length === 1) {
+      r = await this.mudar(c, r, { estado: 'titular', escolha: opcoes[0] });
+      await this.mostrarResumo(c, s, r);
+      await this.pedirTitular(c, s, r);
+    } else if (so) await this.mostrarTarifas(c, s, r);
+    else await this.mostrarQuartos(c, s, r);
+  }
+
+  /** Os tipos de quarto em cartões (foto, a partir de, café, cancelamento) e o texto completo. */
+  private async mostrarQuartos(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
+    const b = r.busca!;
+    const e = estadia(b, r.pedido);
+    const salas = b.salas!.map((sala) => ({ sala, tarifas: b.opcoes.filter((o) => o.sala === sala.n) }));
+    const texto = `Encontrei ${salas.length} opções de quarto de ${dm(b.checkIn)} a ${dm(b.checkOut)} (${e.noites} ${e.noites === 1 ? 'noite' : 'noites'}) para ${pessoasTexto(r.pedido)}. Os valores são o total da estadia, com impostos:\n${salas
+      .map(({ sala, tarifas }) => `${sala.n}. ${descreverSala(sala, tarifas)}`)
+      .join('\n')}\n\nQual quarto você prefere? Responda com o número.`;
+    const cartao: CartaoMensagem = {
+      tipo: 'quartos',
+      ...e,
+      opcoes: salas.map(({ sala, tarifas }) => ({
+        n: sala.n,
+        nome: sala.nome,
+        foto: sala.foto,
+        aPartirDe: Math.min(...tarifas.map((t) => t.total)),
+        tarifas: tarifas.length,
+        cafe: tarifas.some((t) => CAFE.test(t.regime)),
+        cancelamentoGratis: tarifas.some((t) => t.cancelavel),
+      })),
+    };
+    await this.perguntar(c, s, r, texto, cartao);
+  }
+
+  /** As tarifas do quarto escolhido. */
+  private async mostrarTarifas(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
+    const b = r.busca!;
+    const sala = b.salas!.find((x) => x.n === b.sala)!;
+    const tarifas = b.opcoes.filter((o) => o.sala === sala.n);
+    const e = estadia(b, r.pedido);
+    const texto = `${sala.nome}, de ${dm(b.checkIn)} a ${dm(b.checkOut)} (${e.noites} ${e.noites === 1 ? 'noite' : 'noites'}), ${pessoasTexto(r.pedido)}:\n${tarifas
+      .map((t) => `${t.n}. ${descreverTarifa(t)}`)
+      .join('\n')}\n\nQual tarifa você prefere? Responda com o número.`;
+    await this.perguntar(c, s, r, texto, { tipo: 'tarifas', ...e, quarto: sala.nome, foto: sala.foto, tarifas: tarifas.map(cartaoTarifa) });
+  }
+
+  /** Resumo da escolha: datas, quarto, tarifa, diárias, impostos e total. */
+  private async mostrarResumo(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
+    const b = r.busca!;
+    const o = r.escolha!;
+    const e = estadia(b, r.pedido);
+    const nome = b.salas?.find((x) => x.n === o.sala)?.nome ?? o.quartoNome;
+    // Buscas antigas não guardavam diárias e impostos: o total já vem com o ISS.
+    const diarias = o.diarias ?? o.total;
+    const impostos = o.impostos ?? 0;
+    const texto = [
+      'Resumo da sua reserva:',
+      `${dm(b.checkIn)} a ${dm(b.checkOut)} (${e.noites} ${e.noites === 1 ? 'noite' : 'noites'}), ${pessoasTexto(r.pedido)}`,
+      `${nome} · ${o.tarifaNome}`,
+      `${o.regimeNome} · ${cancelamentoTexto(o)}`,
+      '',
+      `Diárias: ${brl(diarias)}`,
+      ...(impostos ? [`Impostos (ISS): ${brl(impostos)}`] : []),
+      `Total: ${brl(o.total)}`,
+    ].join('\n');
+    await this.falar(c, s, texto, {
+      tipo: 'resumo',
+      ...e,
+      quarto: nome,
+      tarifa: cartaoTarifa(o),
+      diarias,
+      impostos,
+      total: o.total,
+      trocarTarifa: b.opcoes.filter((x) => x.sala === o.sala).length > 1,
+      trocarQuarto: (b.salas?.length ?? 1) > 1,
+    });
   }
 
   private async gerarLink(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
@@ -471,7 +685,17 @@ export class Reservas implements OnModuleInit {
       c,
       s,
       `Pronto! ${resumo}. Total: ${brl(oferta.total)}.\nPague por este link até ${ate} (cartão de crédito, com parcelamento, ou Pix):\n${oferta.link}\nAssim que o pagamento for confirmado, eu aviso aqui.`,
+      {
+        tipo: 'pagamento',
+        motivo: 'nova',
+        quarto: escolha.quartoNome,
+        noites: noitesEntre(b.checkIn, b.checkOut),
+        total: oferta.total,
+        link: oferta.link,
+        expiraEm: new Date(oferta.expira).toISOString(),
+      },
     );
+    await this.agendarLembretes(c, r.id, new Date(oferta.expira));
     await this.acoes.notaInterna(
       c,
       s.id,
@@ -504,6 +728,7 @@ export class Reservas implements OnModuleInit {
                 ? 'cancelada'
                 : r.estado;
     const jaConfirmada = r.estado === 'paga' && r.booking_id === codigo && definitivo;
+    const jaExpirada = r.estado === 'expirada';
     r = await this.mudar(c, r, {
       estado: novoEstado,
       status_pagamento: status || null,
@@ -540,6 +765,7 @@ export class Reservas implements OnModuleInit {
       return;
     }
     if (status === 'EXPIRED') {
+      if (jaExpirada) return;
       await this.falar(c, s, 'O link de pagamento expirou. Se ainda quiser a reserva, é só me dizer que eu busco de novo.');
       await this.acoes.notaInterna(c, s.id, 'Reserva: o link de pagamento expirou sem pagamento.', { tipo: 'sistema' });
       return;
@@ -679,7 +905,14 @@ export class Reservas implements OnModuleInit {
       return;
     }
     r = await this.mudar(c, r, { estado: 'aguardando_pagamento', cobranca_id: cob.id, link: cob.link, expira_em: cob.expira_em, ultima_pergunta: null });
-    await this.falar(c, s, `Perfeito! ${resumo[0]!.toUpperCase()}${resumo.slice(1)}. Total: ${brl(d.total)}.\n${await this.cobrancas.textoDoLink(c, cob)}\nAssim que o pagamento cair, confirmo as noites com o hotel e aviso aqui.`);
+    await this.falar(
+      c,
+      s,
+      `Perfeito! ${resumo[0]!.toUpperCase()}${resumo.slice(1)}. Total: ${brl(d.total)}.\n${await this.cobrancas.textoDoLink(c, cob)}\nAssim que o pagamento cair, confirmo as noites com o hotel e aviso aqui.`,
+      cob.link && cob.expira_em
+        ? { tipo: 'pagamento', motivo: 'extensao', quarto: d.room?.name ?? quarto ?? '', noites: n, total: d.total, link: cob.link, expiraEm: new Date(cob.expira_em).toISOString() }
+        : undefined,
+    );
     await this.acoes.notaInterna(c, s.id, `Mais noites: link de pagamento enviado. ${resumo} · ${brl(d.total)}.`, { tipo: 'sistema' });
     await this.concluir(c, s, `Mais noites: ${resumo} · ${brl(d.total)} · aguardando pagamento`);
   }
@@ -772,9 +1005,19 @@ export class Reservas implements OnModuleInit {
   private respostaDireta(r: ReservaRow, ex: ExtracaoReserva, texto: string): ExtracaoReserva {
     const t = texto.trim();
     if (r.estado === 'cotada' && !ex.sim && SIM.test(t)) return { ...ex, sim: true, sobreReserva: true };
-    if (r.estado === 'opcoes' && !ex.escolha) {
-      const n = /^(?:op[cç][aã]o\s*)?(\d{1,2})[.!]?$/i.exec(t)?.[1];
-      if (n) return { ...ex, escolha: Number(n), sobreReserva: true };
+    if ((r.estado === 'tarifas' || r.estado === 'titular') && r.busca?.salas && (TROCAR_TARIFA.test(t) || TROCAR_QUARTO.test(t))) {
+      return { ...ex, sobreReserva: true };
+    }
+    if (r.estado === 'opcoes' || r.estado === 'tarifas') {
+      const b = r.busca;
+      const nomes =
+        r.estado === 'opcoes'
+          ? (b?.salas ?? b?.opcoes.map((o) => ({ n: o.n, nome: o.quartoNome })) ?? [])
+          : (b?.opcoes.filter((o) => o.sala === b.sala).map((o) => ({ n: o.n, nome: o.tarifaNome })) ?? []);
+      // O número dito (ou o botão do cartão, "2. Standard Casal") vale mais que a leitura da IA, que
+      // às vezes acha datas ou pessoas no nome do quarto.
+      const n = numeroEscolhido(t, nomes);
+      if (n) return { ...VAZIA, modelo: ex.modelo, escolha: n, sobreReserva: true };
     }
     if (r.estado === 'titular') {
       const email = /[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}/.exec(t)?.[0] ?? null;
@@ -795,13 +1038,44 @@ export class Reservas implements OnModuleInit {
   }
 
   /** A IA fala com o hóspede em português; a saída traduz para o idioma dele. */
-  private falar(c: Ctx, s: SolicitacaoRow, texto: string) {
-    return this.acoes.enviarAoSolicitante(c, s, { texto, idioma: 'pt', autor: { tipo: 'ia' } });
+  private falar(c: Ctx, s: SolicitacaoRow, texto: string, cartao?: CartaoMensagem) {
+    return this.acoes.enviarAoSolicitante(c, s, { texto, idioma: 'pt', autor: { tipo: 'ia' }, cartao });
   }
 
-  private async perguntar(c: Ctx, s: SolicitacaoRow, r: ReservaRow, texto: string) {
+  private async perguntar(c: Ctx, s: SolicitacaoRow, r: ReservaRow, texto: string, cartao?: CartaoMensagem) {
     await this.mudar(c, r, { ultima_pergunta: texto });
-    await this.falar(c, s, texto);
+    await this.falar(c, s, texto, cartao);
+  }
+
+  /**
+   * Como no bot da VOA: um lembrete quando faltam uns 20 minutos para o link vencer e, vencido sem
+   * pagamento, o aviso (o webhook EXPIRED da VOA pode nem vir).
+   */
+  private async agendarLembretes(c: Ctx, reservaId: string, expira: Date) {
+    const falta = expira.getTime() - Date.now();
+    const lembrete = expira.getTime() - Math.min(20 * 60_000, falta / 3);
+    await this.nucleo.temporizador(c, { tipo: 'reserva_link', orgId: c.tx.orgId, reservaId, etapa: 'lembrete' }, new Date(lembrete));
+    await this.nucleo.temporizador(c, { tipo: 'reserva_link', orgId: c.tx.orgId, reservaId, etapa: 'expira' }, new Date(expira.getTime() + 30_000));
+  }
+
+  /** Temporizador do link de pagamento da reserva (ver `agendarLembretes`). */
+  async lembrarLink(orgId: string, reservaId: string, etapa: 'lembrete' | 'expira'): Promise<void> {
+    await this.nucleo.executar(orgId, async (c) => {
+      const q = await c.tx.client.query<ReservaRow>('SELECT * FROM reserva_hospedagem WHERE id = $1 FOR UPDATE', [reservaId]);
+      const r = q.rows[0];
+      if (!r || r.estado !== 'aguardando_pagamento' || r.tipo !== 'nova' || !r.expira_em) return;
+      const s = await this.acoes.carregar(c, r.solicitacao_id, false);
+      if (etapa === 'lembrete') {
+        if (new Date(r.expira_em).getTime() < Date.now()) return;
+        const fuso = (await this.unidades.versaoAtual(c.tx, s.unidade_id)).fuso;
+        const ate = new Intl.DateTimeFormat('pt-BR', { timeZone: fuso, hour: '2-digit', minute: '2-digit' }).format(new Date(r.expira_em));
+        await this.falar(c, s, `Lembrete: o seu link de pagamento vale até ${ate}. Depois disso, o preço e o quarto não ficam mais guardados. Se precisar de ajuda, é só me chamar por aqui.`);
+        return;
+      }
+      await this.mudar(c, r, { estado: 'expirada' });
+      await this.falar(c, s, 'O link de pagamento venceu e a reserva não foi feita. Se ainda quiser, é só me dizer as datas que eu busco de novo.');
+      await this.acoes.notaInterna(c, s.id, 'Reserva: o link de pagamento venceu sem pagamento.', { tipo: 'sistema' });
+    });
   }
 
   private async mudar(c: Ctx, r: ReservaRow, campos: Record<string, unknown>): Promise<ReservaRow> {

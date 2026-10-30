@@ -18,5 +18,6 @@ add_header Permissions-Policy "microphone=(self), camera=(), geolocation=(), pay
 # WebSocket passam pelo nginx em /api e /tempo-real.
 #   img/media blob: — foto e áudio viram blob URL depois de buscados pela API (com token).
 #   img data:       — QR do quarto (canvas → data URL).
+#   img images.infra.voahoteis.io — fotos dos quartos nos cartões da reserva (servidor de imagens da VOA).
 # `style-src 'unsafe-inline'`: React e o design system usam style={...}.
-add_header ${CSP_HEADER} "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+add_header ${CSP_HEADER} "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://images.infra.voahoteis.io; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" always;

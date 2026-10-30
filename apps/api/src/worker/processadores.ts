@@ -15,6 +15,7 @@ import { Distribuicao } from '../modules/distribuicao/distribuicao.service.js';
 import { Escalonamento } from '../modules/distribuicao/escada.service.js';
 import { Presencas } from '../modules/equipes/presenca.service.js';
 import { Orquestrador, type EntradaMensagem } from '../modules/jornada/orquestrador.js';
+import { Reservas } from '../modules/reservas/reservas.service.js';
 import { Acoes } from '../modules/solicitacoes/acoes.js';
 
 interface DadosNotificacao {
@@ -62,6 +63,7 @@ export class Processadores implements OnApplicationBootstrap, OnApplicationShutd
     private readonly presencas: Presencas,
     private readonly derivarMidia: DerivarMidia,
     private readonly cobrancas: Cobrancas,
+    private readonly reservas: Reservas,
   ) {}
 
   async onApplicationBootstrap() {
@@ -105,6 +107,7 @@ export class Processadores implements OnApplicationBootstrap, OnApplicationShutd
     if (d.tipo === 'oferta_expira') return this.distribuicao.ofertaExpirou(d.orgId, d.ofertaId);
     if (d.tipo === 'escada') return this.escalonamento.avaliar(d.orgId, d.solicitacaoId);
     if (d.tipo === 'cobranca') return this.cobrancas.conferir(d.orgId, d.cobrancaId, d.tentativa);
+    if (d.tipo === 'reserva_link') return this.reservas.lembrarLink(d.orgId, d.reservaId, d.etapa);
     await this.nucleo.executar(d.orgId, async (c) => {
       const s = await this.acoes.carregar(c, d.solicitacaoId);
       const cfg = await this.acoes.config(c, s);

@@ -34,4 +34,6 @@ export type DadosTemporizador =
   /** Olhar a escada de escalonamento da solicitação (idempotente: o que já foi feito não repete). */
   | { tipo: 'escada'; orgId: string; solicitacaoId: string }
   /** Conferir no provedor se o link de pagamento foi pago (repete até pagar ou vencer). */
-  | { tipo: 'cobranca'; orgId: string; cobrancaId: string; tentativa: number };
+  | { tipo: 'cobranca'; orgId: string; cobrancaId: string; tentativa: number }
+  /** Link de pagamento da reserva: lembrete antes de vencer e o aviso de vencido. */
+  | { tipo: 'reserva_link'; orgId: string; reservaId: string; etapa: 'lembrete' | 'expira' };

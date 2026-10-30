@@ -287,7 +287,7 @@ export class ChatQuartoController {
       const s = await this.sessao(c, sessaoId);
       await c.tx.client.query(`UPDATE chat_sessao SET ultimo_uso_em = now() WHERE id = $1 AND ultimo_uso_em < now() - interval '1 minute'`, [s.id]);
       const r = await c.tx.client.query(
-        `SELECT m.id, m.autor_tipo, m.tipo, m.texto, m.status_envio, m.criado_em, m.wa_message_id, (m.midia_chave IS NOT NULL) AS tem_midia,
+        `SELECT m.id, m.autor_tipo, m.tipo, m.texto, m.cartao, m.status_envio, m.criado_em, m.wa_message_id, (m.midia_chave IS NOT NULL) AS tem_midia,
                 split_part(p.nome, ' ', 1) AS autor_nome,
                 (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'transcricao' ORDER BY d.criado_em DESC LIMIT 1) AS transcricao,
                 (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'traducao' AND d.idioma <> 'pt'
@@ -327,6 +327,7 @@ export class ChatQuartoController {
             texto,
             transcricao,
             midiaUrl: l.tem_midia ? `/chat/midia/${l.id}` : null,
+            cartao: l.cartao ?? null,
             criadoEm: new Date(l.criado_em).toISOString(),
             // Só as deste navegador: casa a bolha otimista com a mensagem gravada.
             clienteId: hospede && String(l.wa_message_id ?? '').startsWith(prefixo) ? String(l.wa_message_id).slice(prefixo.length) : null,

@@ -117,6 +117,9 @@ describe.skipIf(!temBanco)('cobrança por link, mais noites e chat do hotel', ()
           cancelamentoTexto: null,
           noites: Math.round((Date.parse(checkOut) - Date.parse(checkIn)) / 86_400_000),
           total: 735,
+          diarias: 700,
+          impostos: 35,
+          foto: null,
         },
       ],
     });
@@ -259,8 +262,9 @@ describe.skipIf(!temBanco)('cobrança por link, mais noites e chat do hotel', ()
     const r = await fetch(`${A.base}/chat/setor`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-chat': tokenQuarto }, body: JSON.stringify({ chave: 'recepcao' }) });
     expect(r.status).toBe(200);
     await proxima(tokenQuarto); // "Pronto! Seu pedido foi encaminhado para Recepção…"
-    const opcoes = await falar(tokenQuarto, 'Ok, quero reservar um quarto');
-    expect(opcoes).toMatch(/^Encontrei estas opções de .* para 2 adultos/);
+    // Um quarto com uma tarifa só: vai direto ao resumo.
+    const resumo = await falar(tokenQuarto, 'Ok, quero reservar um quarto');
+    expect(resumo).toMatch(/^Resumo da sua reserva:\n.*, 2 adultos/);
     const [s] = await A.consulta<{ id: string; estado: string; setor: string }>(
       `SELECT s.id, s.estado, st.chave AS setor FROM solicitacao s JOIN setor st ON st.id = s.setor_id JOIN reserva_hospedagem r ON r.solicitacao_id = s.id
         WHERE s.unidade_id = $1 AND r.tipo = 'nova' ORDER BY r.criado_em DESC LIMIT 1`,
@@ -302,16 +306,17 @@ describe.skipIf(!temBanco)('cobrança por link, mais noites e chat do hotel', ()
     // Sem quarto, não há catálogo nem pedido.
     expect((await fetch(`${A.base}/chat/catalogo`, { headers: { 'x-chat': tok } }).then((r) => r.json())).itens).toEqual([]);
 
-    const opcoes = await falar(tok, 'Quero reservar um quarto');
-    expect(opcoes).toMatch(/^Encontrei estas opções de .* para 2 adultos/);
-    expect(opcoes).toContain('1. Deluxe Casal, com café da manhã: R$ 735,00');
+    const resumo = await falar(tok, 'Quero reservar um quarto');
+    expect(resumo).toMatch(/^Resumo da sua reserva:\n.*, 2 adultos/);
+    expect(resumo).toContain('Deluxe Casal · Motor de Reservas');
+    expect(resumo).toContain('Diárias: R$ 700,00\nImpostos (ISS): R$ 35,00\nTotal: R$ 735,00');
     const [s] = await A.consulta<{ nome: string; local_id: string | null; contexto: { visitante?: boolean } }>(
       `SELECT st.nome, s.local_id, s.contexto FROM solicitacao s JOIN solicitante st ON st.id = s.solicitante_id WHERE st.telefone LIKE 'visitante:%' AND s.unidade_id = $1`,
       [A.h.unidadeId],
     );
     expect(s).toMatchObject({ nome: 'Visitante (chat do hotel)', local_id: null, contexto: { visitante: true } });
-    // "Visitante (chat do hotel)" é nome nosso: escolhida a opção, pergunta o titular.
-    expect(await falar(tok, '1')).toMatch(/^Ótima escolha! Para emitir o link de pagamento, qual o nome completo do titular/);
+    // "Visitante (chat do hotel)" é nome nosso: depois do resumo, pergunta o titular.
+    expect(await proxima(tok)).toMatch(/^Para gerar o link de pagamento, me diga o nome completo do titular/);
 
     // Outro visitante não vê a conversa do primeiro.
     const outro = (await A.req('POST', '/chat/hotel', { codigo: u!.codigo_publico })).corpo.token as string;

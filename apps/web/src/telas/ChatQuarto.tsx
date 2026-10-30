@@ -1,5 +1,5 @@
 import { ActionSheet, Banner, Button, EmptyState, HVProvider, IconButton, Textarea } from '@healthventureslm/design-system';
-import type { CatalogoItemView, ChatView, ContaHospedeView, PedidoView } from '@ramais/contracts';
+import type { CartaoMensagem, CatalogoItemView, ChatView, ContaHospedeView, PedidoView } from '@ramais/contracts';
 import {
   AlertCircle,
   BedDouble,
@@ -27,6 +27,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { API } from '../api';
 import { Avisos, avisar } from '../componentes/Avisos';
 import { MidiaMensagem, TEXTOS_MIDIA, useAnexos, type ArquivoPronto, type TextosMidia } from '../componentes/Midia';
+import { CartaoReserva } from '../componentes/CartaoReserva';
 import { CatalogoHospede, MeusPedidos, MinhaConta, type ApiCatalogo } from '../componentes/CatalogoHospede';
 import { ativarChat, estadoNotificacao, type EstadoNotificacao } from '../notificacoes';
 import { hora } from '../util';
@@ -104,6 +105,40 @@ const TEXTOS = {
     noiteAMais: 'noite a mais',
     noitesAMais: 'noites a mais',
     linkAberto: 'Link de pagamento aberto. Também mandamos aqui no chat.',
+    cartaoQuartosTitulo: 'Encontrei {0} opções de quarto',
+    cartaoQuartosDica: 'Os valores são o total da estadia, com impostos. Deslize e toque no quarto que preferir.',
+    cartaoNoite: 'noite',
+    cartaoNoites: 'noites',
+    cartaoAdulto: 'adulto',
+    cartaoAdultos: 'adultos',
+    cartaoCrianca: 'criança',
+    cartaoCriancas: 'crianças',
+    cartaoQuartos: 'quartos',
+    cartaoAPartirDe: 'A partir de',
+    cartaoTarifa: 'tarifa',
+    cartaoTarifas: 'tarifas',
+    cartaoCafe: 'Com café da manhã',
+    cartaoSemCafe: 'Sem café da manhã',
+    cartaoCancelGratis: 'Cancelamento grátis',
+    cartaoCancelAte: 'Cancelamento grátis até {0}',
+    cartaoNaoReembolsavel: 'Não reembolsável',
+    cartaoVerTarifas: 'Ver tarifas',
+    cartaoEscolher: 'Escolher',
+    cartaoTarifasPergunta: 'Qual tarifa você prefere?',
+    cartaoResumo: 'Resumo da sua reserva',
+    cartaoDiarias: 'Diárias',
+    cartaoImpostos: 'Impostos (ISS)',
+    cartaoTotal: 'Total',
+    cartaoComImpostos: 'Valores da estadia toda, com impostos.',
+    cartaoTrocarTarifa: 'Trocar tarifa',
+    cartaoTrocarQuarto: 'Trocar quarto',
+    cartaoPagamento: 'Link de pagamento',
+    cartaoPagamentoDica: 'Sua reserva ainda não está garantida. Para concluir, pague pelo link.',
+    cartaoPagamentoDicaExtensao: 'As noites a mais ficam garantidas quando o pagamento for confirmado.',
+    cartaoNoitesAMais: 'a mais',
+    cartaoValidoAte: 'Vale até {0}',
+    cartaoVencido: 'Link vencido',
+    cartaoPagar: 'Pagar agora',
     menos: 'Diminuir',
     mais: 'Aumentar',
     pedidoEnviado: 'Pedido enviado. Avisamos aqui quando for confirmado.',
@@ -182,6 +217,40 @@ const TEXTOS = {
     noiteAMais: 'extra night',
     noitesAMais: 'extra nights',
     linkAberto: 'Payment link opened. We also sent it here in the chat.',
+    cartaoQuartosTitulo: 'I found {0} room options',
+    cartaoQuartosDica: 'Prices are for the whole stay, taxes included. Swipe and tap the room you prefer.',
+    cartaoNoite: 'night',
+    cartaoNoites: 'nights',
+    cartaoAdulto: 'adult',
+    cartaoAdultos: 'adults',
+    cartaoCrianca: 'child',
+    cartaoCriancas: 'children',
+    cartaoQuartos: 'rooms',
+    cartaoAPartirDe: 'From',
+    cartaoTarifa: 'rate',
+    cartaoTarifas: 'rates',
+    cartaoCafe: 'Breakfast included',
+    cartaoSemCafe: 'No breakfast',
+    cartaoCancelGratis: 'Free cancellation',
+    cartaoCancelAte: 'Free cancellation until {0}',
+    cartaoNaoReembolsavel: 'Non-refundable',
+    cartaoVerTarifas: 'See rates',
+    cartaoEscolher: 'Choose',
+    cartaoTarifasPergunta: 'Which rate do you prefer?',
+    cartaoResumo: 'Your booking summary',
+    cartaoDiarias: 'Room rate',
+    cartaoImpostos: 'Taxes (ISS)',
+    cartaoTotal: 'Total',
+    cartaoComImpostos: 'Prices are for the whole stay, taxes included.',
+    cartaoTrocarTarifa: 'Change rate',
+    cartaoTrocarQuarto: 'Change room',
+    cartaoPagamento: 'Payment link',
+    cartaoPagamentoDica: 'Your booking is not guaranteed yet. To finish, pay through the link.',
+    cartaoPagamentoDicaExtensao: 'The extra nights are guaranteed once the payment is confirmed.',
+    cartaoNoitesAMais: 'extra',
+    cartaoValidoAte: 'Valid until {0}',
+    cartaoVencido: 'Link expired',
+    cartaoPagar: 'Pay now',
     menos: 'Decrease',
     mais: 'Increase',
     pedidoEnviado: 'Order sent. We will let you know here when it is confirmed.',
@@ -280,6 +349,40 @@ const TEXTOS = {
     noiteAMais: 'noche más',
     noitesAMais: 'noches más',
     linkAberto: 'Enlace de pago abierto. También lo enviamos aquí en el chat.',
+    cartaoQuartosTitulo: 'Encontré {0} opciones de habitación',
+    cartaoQuartosDica: 'Los precios son de toda la estadía, con impuestos. Desliza y toca la habitación que prefieras.',
+    cartaoNoite: 'noche',
+    cartaoNoites: 'noches',
+    cartaoAdulto: 'adulto',
+    cartaoAdultos: 'adultos',
+    cartaoCrianca: 'niño',
+    cartaoCriancas: 'niños',
+    cartaoQuartos: 'habitaciones',
+    cartaoAPartirDe: 'Desde',
+    cartaoTarifa: 'tarifa',
+    cartaoTarifas: 'tarifas',
+    cartaoCafe: 'Con desayuno',
+    cartaoSemCafe: 'Sin desayuno',
+    cartaoCancelGratis: 'Cancelación gratis',
+    cartaoCancelAte: 'Cancelación gratis hasta el {0}',
+    cartaoNaoReembolsavel: 'No reembolsable',
+    cartaoVerTarifas: 'Ver tarifas',
+    cartaoEscolher: 'Elegir',
+    cartaoTarifasPergunta: '¿Qué tarifa prefieres?',
+    cartaoResumo: 'Resumen de tu reserva',
+    cartaoDiarias: 'Tarifa de la estadía',
+    cartaoImpostos: 'Impuestos (ISS)',
+    cartaoTotal: 'Total',
+    cartaoComImpostos: 'Precios de toda la estadía, con impuestos.',
+    cartaoTrocarTarifa: 'Cambiar tarifa',
+    cartaoTrocarQuarto: 'Cambiar habitación',
+    cartaoPagamento: 'Enlace de pago',
+    cartaoPagamentoDica: 'Tu reserva todavía no está garantizada. Para terminar, paga por el enlace.',
+    cartaoPagamentoDicaExtensao: 'Las noches extra quedan garantizadas cuando se confirme el pago.',
+    cartaoNoitesAMais: 'extra',
+    cartaoValidoAte: 'Válido hasta las {0}',
+    cartaoVencido: 'Enlace vencido',
+    cartaoPagar: 'Pagar ahora',
     menos: 'Disminuir',
     mais: 'Aumentar',
     pedidoEnviado: 'Pedido enviado. Le avisamos aquí cuando se confirme.',
@@ -652,6 +755,8 @@ export function ChatQuarto({ codigo, modo = 'quarto' }: { codigo: string; modo?:
   }
 
   const itens = montarItens(dados, pendentes, t);
+  // Só o último cartão aceita escolha; os anteriores (e os de antes do link) ficam de consulta.
+  const ultimoCartao = itens.findLastIndex((m) => m.cartao);
   const temTexto = Boolean(texto.trim());
 
   return (
@@ -791,6 +896,18 @@ export function ChatQuarto({ codigo, modo = 'quarto' }: { codigo: string; modo?:
           </p>
           {itens.map((m, i) => {
             const antes = itens[i - 1];
+            // Cartão da reserva (quartos, tarifas, resumo, pagamento) no lugar do texto.
+            if (m.cartao) {
+              const novoDiaC = !antes || dia(antes.criadoEm) !== dia(m.criadoEm);
+              return (
+                <Fragment key={m.chave}>
+                  {novoDiaC && <div className="zap__dia">{rotuloDia(m.criadoEm, t)}</div>}
+                  <div className="zap__linha zap__linha--inicio">
+                    <CartaoReserva cartao={m.cartao} t={t} idioma={idioma} ativo={i === ultimoCartao} responder={responder} hora={hora(m.criadoEm)} />
+                  </div>
+                </Fragment>
+              );
+            }
             const novoDia = !antes || dia(antes.criadoEm) !== dia(m.criadoEm);
             // Como no WhatsApp: o "rabinho" e o nome só no primeiro balão de uma sequência.
             const primeiro = novoDia || !antes || antes.meu !== m.meu || antes.nome !== m.nome;
@@ -890,6 +1007,11 @@ export function ChatQuarto({ codigo, modo = 'quarto' }: { codigo: string; modo?:
     setTexto('');
     const el = campo.current?.querySelector('textarea');
     if (el) el.style.height = 'auto';
+    responder(v);
+  }
+
+  /** Manda um texto como o hóspede (também o botão dos cartões da reserva). */
+  function responder(v: string) {
     const id = crypto.randomUUID();
     void postar({ clienteId: id, tipo: 'texto', texto: v }, (tk) => chamar('POST', '/chat/mensagens', tk, { id, texto: v }));
   }
@@ -906,6 +1028,7 @@ interface Item {
   texto: string | null;
   transcricao: string | null;
   midiaUrl: string | null;
+  cartao: CartaoMensagem | null;
   criadoEm: string;
   /** Só nas do hóspede: relógio, um tique (chegou), dois tiques azuis (a equipe já respondeu depois). */
   estado: 'enviando' | 'falhou' | 'enviado' | 'visto' | null;
@@ -923,6 +1046,7 @@ function montarItens(dados: ChatView | null, pendentes: Pendente[], t: Textos): 
     texto: m.texto,
     transcricao: m.transcricao,
     midiaUrl: m.midiaUrl,
+    cartao: m.cartao ?? null,
     criadoEm: m.criadoEm,
     estado: m.autor === 'hospede' ? (i < ultimaEquipe ? 'visto' : 'enviado') : null,
   }));
@@ -934,6 +1058,7 @@ function montarItens(dados: ChatView | null, pendentes: Pendente[], t: Textos): 
     texto: p.texto,
     transcricao: null,
     midiaUrl: null,
+    cartao: null,
     criadoEm: p.criadoEm,
     estado: p.falhou ? 'falhou' : 'enviando',
     tentar: p.falhou ? () => void p.enviar() : undefined,

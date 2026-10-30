@@ -1,0 +1,59 @@
+/* Cartões da reserva no chat: quartos lado a lado, tarifas, resumo e pagamento. */
+.cartao-res { display: grid; gap: var(--space-2); }
+.cartao-res--largo, .cartao-res--pagamento { width: min(360px, 82vw); }
+.cartao-res__cabeca { font: var(--type-body); font-weight: 600; color: var(--text-strong); }
+.cartao-res__sub { display: block; font: var(--type-caption); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cartao-res__dica { margin: 0; font: var(--type-body-sm); color: var(--text-body); }
+.cartao-res__titulo { display: flex; align-items: center; gap: var(--space-2); color: var(--text-strong); }
+.cartao-res__titulo svg { width: 18px; height: 18px; flex: none; }
+.cartao-res .zap__meta { justify-self: end; margin-top: 0; }
+
+/* Quartos: a fala acima e os cartões numa faixa com rolagem lateral, como o carrossel do WhatsApp. */
+.cartao-res__bloco { display: grid; gap: var(--space-2); min-width: 0; width: 100%; }
+.cartao-res__bloco > .zap__bolha { justify-self: start; }
+.cartao-res__carrossel {
+  display: flex; gap: var(--space-2); margin: 0; padding: 0 0 var(--space-2); list-style: none;
+  overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: thin; overscroll-behavior-x: contain;
+}
+.cartao-res__carrossel > li { flex: none; width: min(240px, 72vw); scroll-snap-align: start; }
+.cartao-res__quarto { height: 100%; overflow: hidden; display: grid; grid-template-rows: auto 1fr; padding: 0; }
+.cartao-res__quarto-corpo { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-3); }
+.cartao-res__quarto-corpo > button { margin-top: auto; }
+
+.cartao-res__foto { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; background: var(--surface-sunken); }
+.cartao-res__foto--pequena { width: 56px; height: 56px; aspect-ratio: 1; border-radius: var(--radius-sm); flex: none; }
+.cartao-res__foto--vazia { display: grid; place-items: center; color: var(--text-muted); }
+.cartao-res__foto--vazia svg { width: 28px; height: 28px; }
+.cartao-res__foto--pequena.cartao-res__foto--vazia svg { width: 22px; height: 22px; }
+
+.cartao-res__nome { font: var(--type-body); font-weight: 600; color: var(--text-strong); }
+.cartao-res__preco { font: var(--type-body); font-weight: 600; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.cartao-res__preco small { font: var(--type-caption); font-weight: 400; color: var(--text-muted); }
+
+.cartao-res__fatos { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.cartao-res__fatos > li, .cartao-res__fato { display: flex; align-items: center; gap: var(--space-1); font: var(--type-caption); color: var(--text-body); }
+.cartao-res__fatos svg, .cartao-res__fato svg { width: 14px; height: 14px; flex: none; color: var(--text-muted); }
+.cartao-res__fato--bom, .cartao-res__fato--bom svg { color: var(--positive-fg); }
+
+/* Tarifas do quarto. */
+.cartao-res__topo { display: flex; align-items: center; gap: var(--space-3); }
+.cartao-res__tarifas { display: grid; margin: 0; padding: 0; list-style: none; }
+.cartao-res__tarifas > li { display: grid; gap: var(--space-1); padding: var(--space-3) 0; border-top: 1px solid var(--border-subtle); }
+.cartao-res__escolha { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-1); }
+
+/* Resumo e pagamento: linhas com ícone e os valores alinhados à direita. */
+.cartao-res__linhas { display: grid; gap: var(--space-2); margin: 0; }
+.cartao-res__linhas > div { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--space-2); align-items: start; font: var(--type-body-sm); color: var(--text-body); }
+.cartao-res__linhas dt { display: flex; padding-top: 2px; color: var(--text-muted); }
+.cartao-res__linhas dt svg { width: 16px; height: 16px; }
+.cartao-res__linhas dd { margin: 0; min-width: 0; }
+.cartao-res__linhas strong { color: var(--text-strong); }
+.cartao-res__linhas .cartao-res__fato--bom dt { color: var(--positive-fg); }
+
+.cartao-res__valores { display: grid; gap: var(--space-1); margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+.cartao-res__valores > div, .cartao-res__total { display: flex; justify-content: space-between; gap: var(--space-3); font: var(--type-body-sm); color: var(--text-body); font-variant-numeric: tabular-nums; }
+.cartao-res__valores dd { margin: 0; }
+.cartao-res__valores-total, .cartao-res__total { font: var(--type-body); font-weight: 600; color: var(--text-strong); }
+.cartao-res__total { padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+.cartao-res__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.cartao-res__acoes > * { flex: 1 1 auto; }

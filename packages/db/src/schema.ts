@@ -217,6 +217,8 @@ export const mensagem = pgTable('mensagem', {
   midiaChave: text('midia_chave'),
   midiaMime: text('midia_mime'),
   idioma: text('idioma'),
+  /** Cartão da reserva (quartos, tarifas, resumo, pagamento); o texto é a versão completa. */
+  cartao: jsonb('cartao'),
   waMessageId: text('wa_message_id'),
   statusEnvio: text('status_envio')
     .$type<'recebida' | 'pendente' | 'enviada' | 'entregue' | 'lida' | 'falhou' | 'nao_enviar'>()

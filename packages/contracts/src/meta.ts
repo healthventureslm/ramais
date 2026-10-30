@@ -14,7 +14,15 @@ export const MensagemMeta = z.object({
   audio: MidiaMeta.extend({ voice: z.boolean().optional() }).optional(),
   document: MidiaMeta.extend({ filename: z.string().optional() }).optional(),
   button: z.object({ text: z.string() }).optional(),
-  interactive: z.unknown().optional(),
+  /** Resposta a lista ou botão que mandamos (cartão da reserva): vale o título, como se digitado. */
+  interactive: z
+    .object({
+      type: z.string().optional(),
+      list_reply: z.object({ id: z.string(), title: z.string() }).optional(),
+      button_reply: z.object({ id: z.string(), title: z.string() }).optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 export type MensagemMeta = z.infer<typeof MensagemMeta>;
 

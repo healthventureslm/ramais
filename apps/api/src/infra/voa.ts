@@ -25,6 +25,11 @@ export interface TarifaVoa {
   noites: number;
   /** Total da estadia (todos os quartos), já com ISS. */
   total: number;
+  /** As diárias sem o ISS e o ISS (o total é a soma). */
+  diarias: number;
+  impostos: number;
+  /** Foto de capa do quarto (servidor de imagens da VOA). */
+  foto: string | null;
 }
 
 export interface BuscaVoa {
@@ -158,7 +163,7 @@ export class ClienteVoa {
       search?: { id?: string; expires?: string };
       reason?: string;
       rooms?: {
-        room: { id: number; name: string };
+        room: { id: number; name: string; cover_image?: string | null };
         nights: number;
         rates: {
           id: number;
@@ -179,6 +184,7 @@ export class ClienteVoa {
         const iss = t.price_include_iss_tax ? 0 : (t.iss_tax ?? 5);
         const soma = (t.prices ?? []).reduce((s, p) => s + (p.total ?? 0), 0);
         if (!soma) continue;
+        const total = Math.round(soma * (1 + iss / 100) * 100) / 100;
         tarifas.push({
           quartoId: q2.room.id,
           quartoNome: q2.room.name,
@@ -190,7 +196,10 @@ export class ClienteVoa {
           cancelamentoAte: t.cancelable?.final_date_for_cancellation ?? null,
           cancelamentoTexto: t.cancelable?.description ?? null,
           noites: q2.nights,
-          total: Math.round(soma * (1 + iss / 100) * 100) / 100,
+          total,
+          diarias: Math.round(soma * 100) / 100,
+          impostos: Math.round((total - soma) * 100) / 100,
+          foto: q2.room.cover_image ?? null,
         });
       }
     }

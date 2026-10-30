@@ -70,6 +70,10 @@ export class ProcessarWebhook {
         return { ...base, tipo: 'texto', texto: m.text?.body ?? '', midiaId: null, midiaMime: null };
       case 'button':
         return { ...base, tipo: 'texto', texto: m.button?.text ?? '', midiaId: null, midiaMime: null };
+      case 'interactive': {
+        const r = m.interactive?.list_reply ?? m.interactive?.button_reply;
+        return { ...base, tipo: 'texto', texto: r?.title ?? '[interactive]', midiaId: null, midiaMime: null };
+      }
       case 'image':
         return { ...base, tipo: 'imagem', texto: m.image?.caption ?? null, midiaId: m.image?.id ?? null, midiaMime: m.image?.mime_type ?? null };
       case 'audio':

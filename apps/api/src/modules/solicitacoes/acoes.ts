@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { sala, type ChaveTexto, type ConfigUnidade, type ConteudoTexto, type Urgencia } from '@ramais/contracts';
+import { sala, type CartaoMensagem, type ChaveTexto, type ConfigUnidade, type ConteudoTexto, type Urgencia } from '@ramais/contracts';
 import {
   acaoParaEncerrarPeloSolicitante,
   avaliarCondicoes,
@@ -159,13 +159,13 @@ export class Acoes {
   async enviarAoSolicitante(
     c: Ctx,
     s: SolicitacaoRow,
-    m: { texto: string; idioma: string; autor: Ator; traducaoPronta?: { idioma: string; texto: string } },
+    m: { texto: string; idioma: string; autor: Ator; traducaoPronta?: { idioma: string; texto: string }; cartao?: CartaoMensagem },
   ): Promise<string> {
     if (s.origem !== 'externa') throw new ConflictException('pedido interno não tem solicitante');
     const r = await c.tx.client.query<{ id: string }>(
-      `INSERT INTO mensagem (org_id, solicitacao_id, autor_tipo, autor_pessoa_id, visibilidade, tipo, texto, idioma, status_envio)
-       VALUES ($1, $2, $3, $4, 'externa', 'texto', $5, $6, 'pendente') RETURNING id`,
-      [c.tx.orgId, s.id, atorTipo(m.autor), m.autor.tipo === 'pessoa' ? m.autor.id : null, m.texto, m.idioma],
+      `INSERT INTO mensagem (org_id, solicitacao_id, autor_tipo, autor_pessoa_id, visibilidade, tipo, texto, idioma, status_envio, cartao)
+       VALUES ($1, $2, $3, $4, 'externa', 'texto', $5, $6, 'pendente', $7::jsonb) RETURNING id`,
+      [c.tx.orgId, s.id, atorTipo(m.autor), m.autor.tipo === 'pessoa' ? m.autor.id : null, m.texto, m.idioma, m.cartao ? JSON.stringify(m.cartao) : null],
     );
     const id = r.rows[0]!.id;
     if (m.traducaoPronta && m.traducaoPronta.idioma !== m.idioma) {

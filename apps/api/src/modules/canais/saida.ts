@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ServicosIA } from '@ramais/ai';
-import { sala } from '@ramais/contracts';
+import { sala, type CartaoMensagem } from '@ramais/contracts';
 import { idiomaDosTextos } from '@ramais/domain';
 import type { Armazenamento } from '../../infra/armazenamento.js';
 import { ARMAZENAMENTO } from '../../infra/infra.module.js';
@@ -11,6 +11,7 @@ import { comContextoIA, marcarSolicitacaoIA } from '../../infra/uso-ia.js';
 import { Nucleo } from '../../infra/nucleo.js';
 import { IA } from '../../infra/tokens.js';
 import { Unidades } from '../../infra/unidades.js';
+import { interativoDoCartao } from './cartao-whatsapp.js';
 
 const MAX_TENTATIVAS = 8;
 /** Corpo do aviso no navegador do hóspede quando a equipe manda foto ou áudio sem texto. */
@@ -46,7 +47,7 @@ export class Saida {
     // 1. Ler (transação curta).
     const dados = await this.nucleo.executar(orgId, async (c) => {
       const r = await c.tx.client.query(
-        `SELECT m.id, m.texto, m.idioma, m.autor_tipo, m.status_envio, m.tentativas_envio, m.tipo, m.midia_chave, m.midia_mime,
+        `SELECT m.id, m.texto, m.idioma, m.autor_tipo, m.status_envio, m.tentativas_envio, m.tipo, m.midia_chave, m.midia_mime, m.cartao,
                 (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'transcricao'
                   ORDER BY d.criado_em DESC LIMIT 1) AS transcricao,
                 (SELECT d.texto FROM mensagem_derivado d WHERE d.mensagem_id = m.id AND d.tipo = 'traducao' AND d.idioma = s.idioma
@@ -113,6 +114,8 @@ export class Saida {
         ]);
       } else if (midia) {
         waId = await this.enviarMidia(canal, dados.telefone, midia, dados.midia_chave, dados.midia_mime, texto);
+      } else if (dados.cartao) {
+        waId = await this.enviarCartao(canal, dados.telefone, dados.cartao, texto, dados.idioma_destino);
       } else {
         waId = await this.meta.enviarTexto(canal, dados.telefone, texto);
       }
@@ -169,6 +172,19 @@ export class Saida {
         }),
       );
     });
+  }
+
+  /** Cartão da reserva como lista ou botões; se a Meta recusar o formato, vai o texto completo. */
+  private async enviarCartao(canal: { phoneNumberId: string; credencialRef: string }, para: string, cartao: CartaoMensagem, texto: string, idioma: string | null): Promise<string> {
+    const interativo = interativoDoCartao(cartao, texto, idioma);
+    if (!interativo) return this.meta.enviarTexto(canal, para, texto);
+    try {
+      return await this.meta.enviarInterativo(canal, para, interativo);
+    } catch (e) {
+      if (!(e instanceof ErroMeta) || !e.definitivo) throw e;
+      this.log.warn(`cartão recusado pela Meta, vai como texto: ${e.message}`);
+      return this.meta.enviarTexto(canal, para, texto);
+    }
   }
 
   private async enviarMidia(

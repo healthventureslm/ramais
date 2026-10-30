@@ -318,9 +318,67 @@ export type ChatMensagemReq = z.infer<typeof ChatMensagemReq>;
 /** Textos da tela do chat do quarto, para traduzir para o idioma do celular do hóspede. */
 export const ChatTextosReq = z.object({
   idioma: z.string().regex(/^[a-zA-Z]{2,3}([_-][a-zA-Z0-9]{2,8})?$/),
-  textos: z.array(z.string().min(1).max(300)).min(1).max(80),
+  textos: z.array(z.string().min(1).max(300)).min(1).max(200),
 });
 export type ChatTextosReq = z.infer<typeof ChatTextosReq>;
+
+/** Uma tarifa no cartão: os textos o chat escreve no idioma da tela. */
+export interface CartaoTarifa {
+  /** O que o botão manda de volta ("2. Tarifa flexível"). */
+  n: number;
+  nome: string;
+  /** ONLY_HOSTING, HOSTING_WITH_BREAKFAST… (o regime da VOA). */
+  regime: string;
+  cafe: boolean;
+  cancelavel: boolean;
+  /** AAAA-MM-DD: cancelamento grátis até este dia. */
+  cancelamentoAte: string | null;
+  /** Total da estadia, com impostos. */
+  total: number;
+}
+
+interface CartaoEstadia {
+  checkIn: string;
+  checkOut: string;
+  noites: number;
+  adultos: number;
+  criancas: number;
+  quartos: number;
+}
+
+/**
+ * Cartão que acompanha uma mensagem da reserva. O texto da mensagem é a versão completa (equipe,
+ * tradução, WhatsApp fora da janela); o chat desenha o cartão no idioma da tela, e o WhatsApp vira
+ * lista, botões ou botão de link.
+ */
+export type CartaoMensagem =
+  | (CartaoEstadia & {
+      tipo: 'quartos';
+      opcoes: { n: number; nome: string; foto: string | null; aPartirDe: number; tarifas: number; cafe: boolean; cancelamentoGratis: boolean }[];
+    })
+  | (CartaoEstadia & { tipo: 'tarifas'; quarto: string; foto: string | null; tarifas: CartaoTarifa[] })
+  | (CartaoEstadia & {
+      tipo: 'resumo';
+      quarto: string;
+      tarifa: CartaoTarifa;
+      /** Diárias sem impostos, impostos (ISS) e o total. */
+      diarias: number;
+      impostos: number;
+      total: number;
+      /** Mais de uma tarifa no quarto (ou mais de um quarto): mostra "Trocar tarifa"/"Trocar quarto". */
+      trocarTarifa: boolean;
+      trocarQuarto: boolean;
+    })
+  | {
+      tipo: 'pagamento';
+      /** nova: hospedagem; extensao: noites a mais no quarto. */
+      motivo: 'nova' | 'extensao';
+      quarto: string;
+      noites: number;
+      total: number;
+      link: string;
+      expiraEm: string;
+    };
 
 export interface ChatMensagemView {
   id: string;
@@ -332,6 +390,8 @@ export interface ChatMensagemView {
   texto: string | null;
   transcricao: string | null;
   midiaUrl: string | null;
+  /** Quartos, tarifas, resumo ou pagamento da reserva: o chat mostra o cartão no lugar do texto. */
+  cartao: CartaoMensagem | null;
   criadoEm: string;
   /** Id gerado por este navegador, para trocar a bolha "enviando" pela gravada. */
   clienteId: string | null;

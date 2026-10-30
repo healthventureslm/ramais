@@ -54,7 +54,7 @@ export class ClienteMeta {
   private async post(canal: CanalEnvio, corpo: Record<string, unknown>): Promise<string> {
     if (this.dryRun) {
       const id = `dry.${randomUUID()}`;
-      console.log(`[meta:dry-run] → ${String(corpo.to)}: ${JSON.stringify(corpo.text ?? corpo.template)}`);
+      console.log(`[meta:dry-run] → ${String(corpo.to)}: ${JSON.stringify(corpo.text ?? corpo.template ?? corpo.interactive)}`);
       return id;
     }
     const r = await fetch(`${this.base}/${canal.phoneNumberId}/messages`, {
@@ -73,6 +73,11 @@ export class ClienteMeta {
 
   enviarTexto(canal: CanalEnvio, para: string, texto: string): Promise<string> {
     return this.post(canal, { to: para, type: 'text', text: { body: texto, preview_url: false } });
+  }
+
+  /** Lista, botões de resposta ou botão de link (o objeto `interactive` da Cloud API). */
+  enviarInterativo(canal: CanalEnvio, para: string, interativo: Record<string, unknown>): Promise<string> {
+    return this.post(canal, { to: para, type: 'interactive', interactive: interativo });
   }
 
   /** Foto ou áudio: sobe o arquivo na Meta e manda pelo id. Áudio não leva legenda no WhatsApp. */
