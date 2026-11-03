@@ -204,11 +204,30 @@ export function interativosDoCartao(cartao: CartaoMensagem, texto: string, idiom
  * toque no carrossel não está documentado pela Meta; procura qualquer `{ id, title }` na resposta.
  */
 export function textoDoToque(interativo: unknown): string | null {
+  const opcao = opcaoNaMensagem(interativo);
+  if (opcao) return opcao;
   const resposta = acharResposta(interativo);
-  if (!resposta) return null;
-  const opcao = /^(quarto|tarifa)_(\d{1,2})\|(.+)$/s.exec(resposta.id);
-  if (opcao) return `${opcao[2]}. ${opcao[3]}`;
-  return resposta.title || resposta.id;
+  return resposta ? resposta.title || resposta.id : null;
+}
+
+const ID_OPCAO = /^(quarto|tarifa)_(\d{1,2})\|(.+)$/s;
+
+/**
+ * O id de um botão nosso ("quarto_2|Deluxe Casal") em qualquer campo da mensagem. O toque no
+ * carrossel chega como `type: "button"` com o id em `button.payload` e o rótulo ("Escolher") em
+ * `button.text`; sem o id, o hóspede escolhia "Escolher" e a reserva não sabia qual quarto.
+ */
+export function opcaoNaMensagem(v: unknown, fundo = 0): string | null {
+  if (typeof v === 'string') {
+    const m = ID_OPCAO.exec(v);
+    return m ? `${m[2]}. ${m[3]}` : null;
+  }
+  if (!v || typeof v !== 'object' || fundo > 4) return null;
+  for (const x of Object.values(v as Record<string, unknown>)) {
+    const achou = opcaoNaMensagem(x, fundo + 1);
+    if (achou) return achou;
+  }
+  return null;
 }
 
 function acharResposta(v: unknown, fundo = 0): { id: string; title: string } | null {

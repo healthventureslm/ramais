@@ -13,7 +13,11 @@ export const MensagemMeta = z.object({
   image: MidiaMeta.optional(),
   audio: MidiaMeta.extend({ voice: z.boolean().optional() }).optional(),
   document: MidiaMeta.extend({ filename: z.string().optional() }).optional(),
-  button: z.object({ text: z.string() }).optional(),
+  /**
+   * Botão de resposta rápida: de template e também o do carrossel dos cartões da reserva, que
+   * chega como `button` com o id que mandamos em `payload` ("quarto_2|Deluxe Casal").
+   */
+  button: z.object({ text: z.string(), payload: z.string().optional() }).passthrough().optional(),
   /** Resposta a lista ou botão que mandamos (cartão da reserva): vale o título, como se digitado. */
   interactive: z
     .object({
@@ -23,7 +27,9 @@ export const MensagemMeta = z.object({
     })
     .passthrough()
     .optional(),
-});
+  })
+  // O resto fica: o formato do toque no carrossel não é documentado e o id pode vir em outro campo.
+  .passthrough();
 export type MensagemMeta = z.infer<typeof MensagemMeta>;
 
 export const StatusMeta = z.object({

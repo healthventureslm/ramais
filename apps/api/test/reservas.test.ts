@@ -237,8 +237,9 @@ describe.skipIf(!temBanco)('reserva de hospedagem automática', () => {
       // O triplo tem uma tarifa só: o botão é "Escolher" (mesmo tipo e número de botões em todos os cartões).
       expect(carrossel.action.cards[1].action.buttons[0].quick_reply.title).toBe('Escolher');
 
-      // Toque no carrossel: vale o id, que traz o número e o nome.
-      await A.hospede(tel, { interactive: { type: 'button_reply', button_reply: { id: 'quarto_1|Deluxe Quadruplo', title: 'Ver tarifas' } } });
+      // Toque no carrossel, como a Meta manda de verdade: `type: "button"`, o rótulo em `text` e o id
+      // em `payload` (antes só o rótulo era lido e a escolha virava "Ver tarifas").
+      await A.hospede(tel, { type: 'button', button: { payload: 'quarto_1|Deluxe Quadruplo', text: 'Ver tarifas' }, context: { from: '5521967219831', id: 'wamid.carrossel' } });
       const tarifas = await A.esperar(async () => enviados.find((i) => i.type === 'button' && i.action.buttons[0].reply.id.startsWith('tarifa_')));
       expect(tarifas.header).toEqual({ type: 'image', image: { link: 'https://images.infra.voahoteis.io/quarto-333.jpg' } });
       expect(tarifas.action.buttons.map((b: any) => b.reply.title)).toEqual(['1. Não reembolsável', '2. Flexível']);

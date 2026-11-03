@@ -5,7 +5,7 @@ import type pg from 'pg';
 import type { PgBoss } from 'pg-boss';
 import { BOSS, POOL } from '../../infra/tokens.js';
 import type { EntradaMensagem } from '../jornada/orquestrador.js';
-import { textoDoToque } from './cartao-whatsapp.js';
+import { opcaoNaMensagem, textoDoToque } from './cartao-whatsapp.js';
 
 const ORDEM_STATUS: Record<string, number> = { pendente: 0, enviada: 1, entregue: 2, lida: 3 };
 const STATUS_META: Record<StatusMeta['status'], string> = { sent: 'enviada', delivered: 'entregue', read: 'lida', failed: 'falhou' };
@@ -70,7 +70,8 @@ export class ProcessarWebhook {
       case 'text':
         return { ...base, tipo: 'texto', texto: m.text?.body ?? '', midiaId: null, midiaMime: null };
       case 'button':
-        return { ...base, tipo: 'texto', texto: m.button?.text ?? '', midiaId: null, midiaMime: null };
+        // Botão de template, ou o do carrossel dos cartões (o id vem em payload).
+        return { ...base, tipo: 'texto', texto: opcaoNaMensagem(m.button) ?? m.button?.text ?? '', midiaId: null, midiaMime: null };
       case 'interactive':
         // Toque num botão, numa linha da lista ou no carrossel de um cartão: vale como digitado.
         return { ...base, tipo: 'texto', texto: textoDoToque(m.interactive) ?? '[interactive]', midiaId: null, midiaMime: null };

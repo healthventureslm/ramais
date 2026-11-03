@@ -55,10 +55,17 @@ export async function subirAmbiente(opcoes: { modoIa?: 'sombra' | 'automatico'; 
     return { status: r.status, corpo: texto ? JSON.parse(texto) : null };
   }
 
-  /** Mensagem do hóspede pelo WhatsApp: texto, ou o toque num botão/lista (`{ interactive }`). */
-  async function hospede(de: string, texto: string | { interactive: Record<string, unknown> }) {
+  /**
+   * Mensagem do hóspede pelo WhatsApp: texto, o toque num botão/lista (`{ interactive }`) ou outra
+   * mensagem crua (`{ type: 'button', button: {...} }`, como chega o toque no carrossel).
+   */
+  async function hospede(de: string, texto: string | { interactive: Record<string, unknown> } | ({ type: string } & Record<string, unknown>)) {
     const corpo =
-      typeof texto === 'string' ? { type: 'text', text: { body: texto } } : { type: 'interactive', interactive: texto.interactive };
+      typeof texto === 'string'
+        ? { type: 'text', text: { body: texto } }
+        : 'interactive' in texto && !('type' in texto)
+          ? { type: 'interactive', interactive: texto.interactive }
+          : texto;
     const payload = JSON.stringify({
       object: 'whatsapp_business_account',
       entry: [
