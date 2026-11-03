@@ -1,6 +1,6 @@
 import { Badge, Button, Card } from '@healthventureslm/design-system';
 import type { CartaoMensagem, CartaoTarifa } from '@ramais/contracts';
-import { BedDouble, CalendarDays, CircleCheck, CircleX, Clock3, Coffee, CreditCard, Users } from 'lucide-react';
+import { BedDouble, CalendarDays, CircleCheck, CircleX, Clock3, Coffee, CreditCard, ShoppingBag, Users } from 'lucide-react';
 import '../estilo/cartao-reserva.css';
 
 /** Textos dos cartões (vêm do chat, já no idioma da tela). `{0}` é trocado pelo valor. */
@@ -35,6 +35,7 @@ export interface TextosCartao {
   cartaoPagamento: string;
   cartaoPagamentoDica: string;
   cartaoPagamentoDicaExtensao: string;
+  cartaoPagamentoDicaPedido: string;
   cartaoNoitesAMais: string;
   cartaoValidoAte: string;
   cartaoVencido: string;
@@ -74,22 +75,24 @@ export function CartaoReserva({ cartao, t, idioma, ativo, responder, hora }: Pro
           <CreditCard aria-hidden="true" />
           <strong>{t.cartaoPagamento}</strong>
         </div>
-        <p className="cartao-res__dica">{cartao.motivo === 'extensao' ? t.cartaoPagamentoDicaExtensao : t.cartaoPagamentoDica}</p>
+        <p className="cartao-res__dica">
+          {cartao.motivo === 'extensao' ? t.cartaoPagamentoDicaExtensao : cartao.motivo === 'pedido' ? t.cartaoPagamentoDicaPedido : t.cartaoPagamentoDica}
+        </p>
         <dl className="cartao-res__linhas">
           {cartao.quarto && (
             <div>
-              <dt>
-                <BedDouble aria-hidden="true" />
-              </dt>
+              <dt>{cartao.motivo === 'pedido' ? <ShoppingBag aria-hidden="true" /> : <BedDouble aria-hidden="true" />}</dt>
               <dd>{cartao.quarto}</dd>
             </div>
           )}
-          <div>
-            <dt>
-              <CalendarDays aria-hidden="true" />
-            </dt>
-            <dd>{cartao.motivo === 'extensao' ? `${cartao.noites} ${t.cartaoNoitesAMais}` : contar(cartao.noites, t.cartaoNoite, t.cartaoNoites)}</dd>
-          </div>
+          {cartao.noites > 0 && (
+            <div>
+              <dt>
+                <CalendarDays aria-hidden="true" />
+              </dt>
+              <dd>{cartao.motivo === 'extensao' ? `${cartao.noites} ${t.cartaoNoitesAMais}` : contar(cartao.noites, t.cartaoNoite, t.cartaoNoites)}</dd>
+            </div>
+          )}
           <div>
             <dt>
               <Clock3 aria-hidden="true" />

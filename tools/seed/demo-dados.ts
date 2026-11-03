@@ -15,6 +15,11 @@ export const DEMO = {
   unidade: 'Wyndham Rio Barra',
   /** Domínio dos e-mails de login. Não recebe e-mail: só identifica a conta. */
   dominioEmail: 'wyndham.demo',
+  /**
+   * Número de WhatsApp da demo ("Ramais Hoteis", conta da HealthVentures na Meta). IDs públicos da
+   * Meta, não segredo: o token é o META_TOKEN do ramais-api. Cada deploy garante o canal.
+   */
+  whatsapp: { phoneNumberId: '1299625879906900', wabaId: '4108144069477921', numero: '+55 21 96721-9831' },
 };
 
 export const DEMO_PESSOAS: {

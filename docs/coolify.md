@@ -202,6 +202,8 @@ Para quem ainda vai se hospedar: tira dúvidas pela base de conhecimento e faz a
 - **Verify token:** o valor de `META_VERIFY_TOKEN`.
 - No `ramais-api`: `META_DRY_RUN=false`, `META_TOKEN` e **Redeploy**.
 - **Troque a URL na Meta só depois que `https://<dominio>/api/saude` responder JSON.** Antes disso, a Meta receberia o `index.html` com status 200 e consideraria a mensagem entregue.
+- **App da Meta compartilhado com outro sistema** (o HealthVentures também atende o `ramais.com.br`): não troque o webhook do app. Desvie só a conta do WhatsApp do hotel: `POST /v23.0/<waba_id>/subscribed_apps` com `override_callback_uri=https://<dominio>/api/webhooks/whatsapp` e `verify_token=<META_VERIFY_TOKEN>` (token do `META_TOKEN`). Os outros números do app continuam no webhook dele.
+- **Demo (Wyndham Rio Barra):** o número "Ramais Hoteis" (+55 21 96721-9831) está em `tools/seed/demo-dados.ts` e cada deploy garante o canal no hotel. Os cartões da reserva (carrossel de quartos, botões, "Pagar agora") saem como mensagens interativas; formato recusado pela Meta cai no próximo e, por fim, no texto.
 
 ## Operação
 

@@ -55,7 +55,10 @@ export async function subirAmbiente(opcoes: { modoIa?: 'sombra' | 'automatico'; 
     return { status: r.status, corpo: texto ? JSON.parse(texto) : null };
   }
 
-  async function hospede(de: string, texto: string) {
+  /** Mensagem do hóspede pelo WhatsApp: texto, ou o toque num botão/lista (`{ interactive }`). */
+  async function hospede(de: string, texto: string | { interactive: Record<string, unknown> }) {
+    const corpo =
+      typeof texto === 'string' ? { type: 'text', text: { body: texto } } : { type: 'interactive', interactive: texto.interactive };
     const payload = JSON.stringify({
       object: 'whatsapp_business_account',
       entry: [
@@ -68,7 +71,7 @@ export async function subirAmbiente(opcoes: { modoIa?: 'sombra' | 'automatico'; 
                 messaging_product: 'whatsapp',
                 metadata: { display_phone_number: '+5521900000000', phone_number_id: h.phoneNumberId },
                 contacts: [{ wa_id: de, profile: { name: 'Hóspede' } }],
-                messages: [{ from: de, id: `wamid.${randomUUID()}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: texto } }],
+                messages: [{ from: de, id: `wamid.${randomUUID()}`, timestamp: String(Math.floor(Date.now() / 1000)), ...corpo }],
               },
             },
           ],

@@ -360,6 +360,7 @@ export type CartaoMensagem =
   | (CartaoEstadia & {
       tipo: 'resumo';
       quarto: string;
+      foto?: string | null;
       tarifa: CartaoTarifa;
       /** Diárias sem impostos, impostos (ISS) e o total. */
       diarias: number;
@@ -371,9 +372,11 @@ export type CartaoMensagem =
     })
   | {
       tipo: 'pagamento';
-      /** nova: hospedagem; extensao: noites a mais no quarto. */
-      motivo: 'nova' | 'extensao';
+      /** nova: hospedagem; extensao: noites a mais no quarto; pedido: pedido ou conta do quarto. */
+      motivo: 'nova' | 'extensao' | 'pedido';
+      /** O quarto (hospedagem) ou o que está sendo pago (pedido). */
       quarto: string;
+      /** Zero no pedido. */
       noites: number;
       total: number;
       link: string;

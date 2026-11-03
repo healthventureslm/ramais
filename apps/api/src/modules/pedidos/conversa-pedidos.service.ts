@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ContextoPedido, ExtracaoPedido, ServicosIA } from '@ramais/ai';
-import type { CatalogoItemView } from '@ramais/contracts';
+import type { CartaoMensagem, CatalogoItemView } from '@ramais/contracts';
 import { dataLocal, diaDaSemana, normalizar, totalDoPedido } from '@ramais/domain';
 import { Nucleo, type Ctx } from '../../infra/nucleo.js';
 import { IA } from '../../infra/tokens.js';
@@ -306,10 +306,12 @@ export class ConversaPedidos {
       await this.guardar(c, s, null);
       let pagamento = total !== null ? `\nTotal: ${brl(total)}, na conta do quarto.` : '';
       let link = false;
+      let cartao: CartaoMensagem | undefined;
       if (pagarAgora && (total ?? 0) > 0) {
         try {
           const cob = await this.pedidos.cobrar(c, s, r.pedidos.map((p) => p.id), null);
           pagamento = `\nTotal: ${brl(cob.valor_centavos)}.\n\n${await this.cobrancas.textoDoLink(c, cob)}`;
+          cartao = this.cobrancas.cartaoDoLink(cob);
           link = true;
         } catch (err) {
           this.log.warn(`link de pagamento falhou (${s.id}): ${(err as Error).message}`);
@@ -317,7 +319,7 @@ export class ConversaPedidos {
         }
       }
       const aviso = link ? 'Avisamos aqui quando o pagamento cair e quando o pedido for confirmado.' : `Avisamos aqui assim que ${r.atendimentos > 1 ? 'cada setor confirmar' : 'for confirmado'}.`;
-      await this.falar(c, s, `Pronto! Pedido enviado:\n${texto}${pagamento}\n\n${aviso}`);
+      await this.falar(c, s, `Pronto! Pedido enviado:\n${texto}${pagamento}\n\n${aviso}`, cartao);
       await this.concluir(
         c,
         s,
@@ -373,8 +375,8 @@ export class ConversaPedidos {
   }
 
   /** A IA fala em português; a saída traduz para o idioma do hóspede. */
-  private falar(c: Ctx, s: SolicitacaoRow, texto: string) {
-    return this.acoes.enviarAoSolicitante(c, s, { texto, idioma: 'pt', autor: { tipo: 'ia' } });
+  private falar(c: Ctx, s: SolicitacaoRow, texto: string, cartao?: CartaoMensagem) {
+    return this.acoes.enviarAoSolicitante(c, s, { texto, idioma: 'pt', autor: { tipo: 'ia' }, cartao });
   }
 
   private async concluir(c: Ctx, s: SolicitacaoRow, resumo: string) {

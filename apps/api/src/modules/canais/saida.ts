@@ -11,7 +11,7 @@ import { comContextoIA, marcarSolicitacaoIA } from '../../infra/uso-ia.js';
 import { Nucleo } from '../../infra/nucleo.js';
 import { IA } from '../../infra/tokens.js';
 import { Unidades } from '../../infra/unidades.js';
-import { interativoDoCartao } from './cartao-whatsapp.js';
+import { interativosDoCartao } from './cartao-whatsapp.js';
 
 const MAX_TENTATIVAS = 8;
 /** Corpo do aviso no navegador do hóspede quando a equipe manda foto ou áudio sem texto. */
@@ -174,17 +174,20 @@ export class Saida {
     });
   }
 
-  /** Cartão da reserva como lista ou botões; se a Meta recusar o formato, vai o texto completo. */
+  /**
+   * Cartão da reserva como carrossel, botões ou lista. Formato recusado pela Meta (erro definitivo:
+   * foto inacessível, recurso não liberado no número) cai no próximo e, por fim, no texto completo.
+   */
   private async enviarCartao(canal: { phoneNumberId: string; credencialRef: string }, para: string, cartao: CartaoMensagem, texto: string, idioma: string | null): Promise<string> {
-    const interativo = interativoDoCartao(cartao, texto, idioma);
-    if (!interativo) return this.meta.enviarTexto(canal, para, texto);
-    try {
-      return await this.meta.enviarInterativo(canal, para, interativo);
-    } catch (e) {
-      if (!(e instanceof ErroMeta) || !e.definitivo) throw e;
-      this.log.warn(`cartão recusado pela Meta, vai como texto: ${e.message}`);
-      return this.meta.enviarTexto(canal, para, texto);
+    for (const interativo of interativosDoCartao(cartao, texto, idioma)) {
+      try {
+        return await this.meta.enviarInterativo(canal, para, interativo);
+      } catch (e) {
+        if (!(e instanceof ErroMeta) || !e.definitivo) throw e;
+        this.log.warn(`cartão (${String(interativo.type)}) recusado pela Meta, tento o próximo formato: ${e.message}`);
+      }
     }
+    return this.meta.enviarTexto(canal, para, texto);
   }
 
   private async enviarMidia(

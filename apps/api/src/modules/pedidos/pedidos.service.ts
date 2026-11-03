@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
-import type { CatalogoItemView, ContaHospedeView, JanelaHorario, PedidoReq, PedidoView } from '@ramais/contracts';
+import type { CartaoMensagem, CatalogoItemView, ContaHospedeView, JanelaHorario, PedidoReq, PedidoView } from '@ramais/contracts';
 import { dataLocal, horariosLivres, idiomaDoOriginal, instanteLocal, totalDoPedido, vagasDoPedido, type ItemAgendavel } from '@ramais/domain';
 import { Nucleo, type Ctx } from '../../infra/nucleo.js';
 import { Unidades } from '../../infra/unidades.js';
@@ -230,7 +230,7 @@ export class Pedidos implements OnModuleInit {
       const alvo = todos.filter((x) => x.estado !== 'recusado' && x.estado !== 'cancelado' && !x.lancado_em && !(x.cobranca_id && ativas.includes(x.cobranca_id)));
       if (!alvo.length) throw new ConflictException('nada a cobrar: os itens já foram pagos, lançados ou cancelados');
       const cob = await this.cobrar(c, s, alvo.map((x) => x.id), pessoaId);
-      await this.falar(c, s, `Total: ${brl(cob.valor_centavos)}.\n${await this.cobrancas.textoDoLink(c, cob)}\nAssim que o pagamento cair, avisamos aqui.`, pessoaId);
+      await this.falar(c, s, `Total: ${brl(cob.valor_centavos)}.\n${await this.cobrancas.textoDoLink(c, cob)}\nAssim que o pagamento cair, avisamos aqui.`, pessoaId, this.cobrancas.cartaoDoLink(cob));
       await this.acoes.notaInterna(c, s.id, `Link de pagamento enviado ao hóspede: ${brl(cob.valor_centavos)}.`, { tipo: 'pessoa', id: pessoaId });
       return { ok: true, link: cob.link };
     });
@@ -616,6 +616,7 @@ export class Pedidos implements OnModuleInit {
           texto: `Sua conta: ${brl(cob.valor_centavos)}.\n${await this.cobrancas.textoDoLink(c, cob)}\nAssim que o pagamento cair, aviso aqui.`,
           idioma: 'pt',
           autor: { tipo: 'ia' },
+          cartao: this.cobrancas.cartaoDoLink(cob),
         });
         await this.acoes.notaInterna(c, s.id, `O hóspede pediu para pagar a conta por link (Minha conta): ${brl(cob.valor_centavos)}, ${ids.length} ${ids.length === 1 ? 'item' : 'itens'}.`, { tipo: 'sistema' });
         return { link: cob.link, valorCentavos: cob.valor_centavos };
@@ -707,8 +708,8 @@ export class Pedidos implements OnModuleInit {
   }
 
   /** Mensagem da equipe ao hóspede: escrita em português, sai traduzida para o idioma dele. */
-  private falar(c: Ctx, s: SolicitacaoRow, texto: string, pessoaId: string) {
-    return this.acoes.enviarAoSolicitante(c, s, { texto, idioma: 'pt', autor: { tipo: 'pessoa', id: pessoaId } });
+  private falar(c: Ctx, s: SolicitacaoRow, texto: string, pessoaId: string, cartao?: CartaoMensagem) {
+    return this.acoes.enviarAoSolicitante(c, s, { texto, idioma: 'pt', autor: { tipo: 'pessoa', id: pessoaId }, cartao });
   }
 
   async confirmar(orgId: string, pedidoId: string, pessoaId: string) {

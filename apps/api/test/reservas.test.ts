@@ -210,6 +210,73 @@ describe.skipIf(!temBanco)('reserva de hospedagem automática', () => {
     expect((await saidas(tel)).filter((t) => /venceu|expirou/.test(t)).length).toBe(1);
   }, 60_000);
 
+  it('no WhatsApp: carrossel de quartos com foto, botões nas tarifas e no resumo, pagamento no botão', async () => {
+    // @ts-ignore: módulos compilados
+    const { ClienteMeta, ErroMeta } = await import('../dist/infra/meta.js');
+    const meta = A.worker.get(ClienteMeta);
+    const original = meta.enviarInterativo.bind(meta);
+    const enviados: any[] = [];
+    let recusar: string | null = null;
+    meta.enviarInterativo = async (canal: unknown, para: string, i: any) => {
+      enviados.push(i);
+      if (i.type === recusar) throw new ErroMeta('(#131009) Parameter value is not valid', 400, true);
+      return original(canal, para, i);
+    };
+    try {
+      const tel = '5521977770005';
+      await A.hospede(tel, 'Quero um quarto para mim');
+      const carrossel = await A.esperar(async () => enviados.find((i) => i.type === 'carousel'));
+      expect(carrossel.body.text).toMatch(/^Encontrei 2 opções de quarto .*com impostos\.\nDeslize e toque no quarto que preferir\.$/s);
+      expect(carrossel.action.cards).toHaveLength(2);
+      expect(carrossel.action.cards[0]).toMatchObject({
+        card_index: 0,
+        header: { type: 'image', image: { link: 'https://images.infra.voahoteis.io/quarto-333.jpg' } },
+        action: { buttons: [{ type: 'quick_reply', quick_reply: { id: 'quarto_1|Deluxe Quadruplo', title: 'Ver tarifas' } }] },
+      });
+      expect(carrossel.action.cards[0].body.text.replace(/ /g, ' ')).toBe('Deluxe Quadruplo\nA partir de R$ 600,00\nCafé da manhã · Cancelamento grátis · 2 tarifas');
+      // O triplo tem uma tarifa só: o botão é "Escolher" (mesmo tipo e número de botões em todos os cartões).
+      expect(carrossel.action.cards[1].action.buttons[0].quick_reply.title).toBe('Escolher');
+
+      // Toque no carrossel: vale o id, que traz o número e o nome.
+      await A.hospede(tel, { interactive: { type: 'button_reply', button_reply: { id: 'quarto_1|Deluxe Quadruplo', title: 'Ver tarifas' } } });
+      const tarifas = await A.esperar(async () => enviados.find((i) => i.type === 'button' && i.action.buttons[0].reply.id.startsWith('tarifa_')));
+      expect(tarifas.header).toEqual({ type: 'image', image: { link: 'https://images.infra.voahoteis.io/quarto-333.jpg' } });
+      expect(tarifas.action.buttons.map((b: any) => b.reply.title)).toEqual(['1. Não reembolsável', '2. Flexível']);
+      expect(tarifas.body.text.replace(/ /g, ' ')).toContain('2. Tarifa Flexível: R$ 636,30');
+
+      await A.hospede(tel, { interactive: { type: 'button_reply', button_reply: { id: 'tarifa_2|Tarifa Flexível', title: '2. Flexível' } } });
+      await esperarSaida(tel, /Resumo da sua reserva/);
+      const doHospede = await A.consulta<{ texto: string }>(
+        `SELECT m.texto FROM mensagem m JOIN solicitacao s ON s.id = m.solicitacao_id JOIN solicitante so ON so.id = s.solicitante_id
+          WHERE so.telefone = $1 AND m.autor_tipo = 'solicitante' ORDER BY m.criado_em`,
+        [tel],
+      );
+      // Os toques entram como se digitados (o horário do WhatsApp é em segundos: a ordem pode empatar).
+      expect(doHospede.map((m) => m.texto).sort()).toEqual(['1. Deluxe Quadruplo', '2. Tarifa Flexível', 'Quero um quarto para mim']);
+      const resumo = await A.esperar(async () => enviados.find((i) => i.type === 'button' && i.action.buttons.some((b: any) => b.reply.id === 'trocar_tarifa')));
+      expect(resumo.header.image.link).toBe('https://images.infra.voahoteis.io/quarto-333.jpg');
+      expect(resumo.action.buttons.map((b: any) => b.reply.title)).toEqual(['Trocar tarifa', 'Trocar quarto']);
+
+      // "Trocar quarto" (botão do resumo) volta ao carrossel. Se a Meta recusar o carrossel, vai a lista.
+      recusar = 'carousel';
+      await A.hospede(tel, { interactive: { type: 'button_reply', button_reply: { id: 'trocar_quarto', title: 'Trocar quarto' } } });
+      const lista = await A.esperar(async () => enviados.find((i) => i.type === 'list'));
+      expect(lista.action.sections[0].rows[1]).toMatchObject({ id: 'quarto_2|Deluxe Triplo', title: '2. Deluxe Triplo' });
+      recusar = null;
+      await A.hospede(tel, { interactive: { type: 'list_reply', list_reply: { id: 'quarto_2|Deluxe Triplo', title: '2. Deluxe Triplo', description: '' } } });
+      await A.esperar(async () => ((await saidas(tel)).filter((t) => t.startsWith('Resumo da sua reserva')).length === 2 ? true : null));
+
+      await A.hospede(tel, 'João Teste Lima');
+      const pagar = await A.esperar(async () => enviados.find((i) => i.type === 'cta_url'));
+      expect(pagar.header).toEqual({ type: 'text', text: 'Link de pagamento' });
+      expect(pagar.action).toMatchObject({ name: 'cta_url', parameters: { display_text: 'Pagar agora' } });
+      expect(pagar.action.parameters.url).toMatch(/^https:\/\/book\.salabim\.ai\/central\/checkout\//);
+      expect(pagar.body.text).not.toContain('book.salabim.ai');
+    } finally {
+      meta.enviarInterativo = original;
+    }
+  }, 90_000);
+
   it('o hóspede desiste; a VOA fora do ar passa o pedido para a recepção', async () => {
     const tel = '5521977770002';
     await A.hospede(tel, 'Quero reservar um quarto');

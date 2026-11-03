@@ -72,6 +72,17 @@ async function sincronizarCatalogo(client: Tx['client'], orgId: string, unidadeI
   return n;
 }
 
+/** O número de WhatsApp da demo no hotel (uma vez só; se já estiver em outro hotel, fica lá). */
+async function garantirWhatsapp(client: Tx['client'], orgId: string, unidadeId: string): Promise<boolean> {
+  const w = DEMO.whatsapp;
+  const r = await client.query(
+    `INSERT INTO canal_whatsapp (org_id, unidade_id, phone_number_id, waba_id, numero_exibicao, modo_credencial, credencial_ref)
+     VALUES ($1, $2, $3, $4, $5, 'gerenciada', 'META_TOKEN') ON CONFLICT (phone_number_id) DO NOTHING`,
+    [orgId, unidadeId, w.phoneNumberId, w.wabaId, w.numero],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
 // Como dono, sem tenant, a RLS esconde tudo: a checagem usa a função de sistema do login.
 const ja = await pool.query<{ org_id: string }>('SELECT * FROM sistema.resolver_login($1)', [email('admin')]);
 if (ja.rows.length) {
@@ -89,11 +100,15 @@ if (ja.rows.length) {
       );
       n += r.rowCount ?? 0;
     }
-    return { base: n, catalogo: await sincronizarCatalogo(client, ja.rows[0]!.org_id, u.rows[0].id) };
+    return {
+      base: n,
+      catalogo: await sincronizarCatalogo(client, ja.rows[0]!.org_id, u.rows[0].id),
+      whatsapp: await garantirWhatsapp(client, ja.rows[0]!.org_id, u.rows[0].id),
+    };
   });
   console.log(
     `demo já existe (${DEMO.unidade}, login ${email('admin')}). Base de conhecimento: ${novas.base} entrada(s) nova(s); ` +
-      `catálogo: ${novas.catalogo} item(ns) novo(s).`,
+      `catálogo: ${novas.catalogo} item(ns) novo(s)${novas.whatsapp ? `; WhatsApp ${DEMO.whatsapp.numero} ligado` : ''}.`,
   );
   await pool.end();
   process.exit(0);
@@ -117,6 +132,7 @@ await comTenant(pool, orgId, async ({ client }) => {
     [orgId, unidadeId, JSON.stringify(configHotel)],
   );
   await client.query('UPDATE unidade SET jornada_versao_id = $2 WHERE id = $1', [unidadeId, j.rows[0]!.id]);
+  await garantirWhatsapp(client, orgId, unidadeId);
 
   // IA em modo automático: na apresentação o pedido cai direto no setor certo, em vez de ficar
   // na recepção com a sugestão (o padrão, "sombra"). Volta pela tela de administração.

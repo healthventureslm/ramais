@@ -135,6 +135,7 @@ const TEXTOS = {
     cartaoPagamento: 'Link de pagamento',
     cartaoPagamentoDica: 'Sua reserva ainda não está garantida. Para concluir, pague pelo link.',
     cartaoPagamentoDicaExtensao: 'As noites a mais ficam garantidas quando o pagamento for confirmado.',
+    cartaoPagamentoDicaPedido: 'Pague por Pix ou cartão. Avisamos aqui quando o pagamento cair.',
     cartaoNoitesAMais: 'a mais',
     cartaoValidoAte: 'Vale até {0}',
     cartaoVencido: 'Link vencido',
@@ -247,6 +248,7 @@ const TEXTOS = {
     cartaoPagamento: 'Payment link',
     cartaoPagamentoDica: 'Your booking is not guaranteed yet. To finish, pay through the link.',
     cartaoPagamentoDicaExtensao: 'The extra nights are guaranteed once the payment is confirmed.',
+    cartaoPagamentoDicaPedido: 'Pay by Pix or card. We will let you know here when the payment goes through.',
     cartaoNoitesAMais: 'extra',
     cartaoValidoAte: 'Valid until {0}',
     cartaoVencido: 'Link expired',
@@ -379,6 +381,7 @@ const TEXTOS = {
     cartaoPagamento: 'Enlace de pago',
     cartaoPagamentoDica: 'Tu reserva todavía no está garantizada. Para terminar, paga por el enlace.',
     cartaoPagamentoDicaExtensao: 'Las noches extra quedan garantizadas cuando se confirme el pago.',
+    cartaoPagamentoDicaPedido: 'Paga con Pix o tarjeta. Te avisamos aquí cuando se confirme el pago.',
     cartaoNoitesAMais: 'extra',
     cartaoValidoAte: 'Válido hasta las {0}',
     cartaoVencido: 'Enlace vencido',
@@ -902,6 +905,17 @@ export function ChatQuarto({ codigo, modo = 'quarto' }: { codigo: string; modo?:
               return (
                 <Fragment key={m.chave}>
                   {novoDiaC && <div className="zap__dia">{rotuloDia(m.criadoEm, t)}</div>}
+                  {/* Link de pedido: o que foi pedido vem no texto, acima do cartão (sem o link, que vai no botão). */}
+                  {m.cartao.tipo === 'pagamento' && m.cartao.motivo === 'pedido' && m.texto && (
+                    <div className="zap__linha zap__linha--inicio">
+                      <div className="zap__bolha zap__bolha--deles zap__bolha--rabo">
+                        <span className="zap__texto" dir="auto">
+                          {m.texto.split(m.cartao.link).join('').replace(/\n{3,}/g, '\n\n').trim()}
+                        </span>
+                        <span className="zap__meta">{hora(m.criadoEm)}</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="zap__linha zap__linha--inicio">
                     <CartaoReserva cartao={m.cartao} t={t} idioma={idioma} ativo={i === ultimoCartao} responder={responder} hora={hora(m.criadoEm)} />
                   </div>

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { CartaoMensagem } from '@ramais/contracts';
 import type { Config } from '../../config.js';
 import { Nucleo, type Ctx } from '../../infra/nucleo.js';
 import { ClienteSalabim, type EstadoLink, type ItemLink } from '../../infra/salabim.js';
@@ -105,6 +106,15 @@ export class Cobrancas {
   }
 
   /** Texto do link para o hóspede (o mesmo em todo lugar). */
+  /**
+   * O cartão com o botão "Pagar agora" (chat e WhatsApp) para um link de pedido ou da conta. O que
+   * foi pedido fica no texto da mensagem (traduzido), que o chat mostra acima do cartão.
+   */
+  cartaoDoLink(cob: CobrancaRow): CartaoMensagem | undefined {
+    if (!cob.link || !cob.expira_em) return undefined;
+    return { tipo: 'pagamento', motivo: 'pedido', quarto: '', noites: 0, total: cob.valor_centavos / 100, link: cob.link, expiraEm: new Date(cob.expira_em).toISOString() };
+  }
+
   async textoDoLink(c: Ctx, cob: CobrancaRow): Promise<string> {
     const teste = this.salabim.teste ? '\n(Ambiente de testes: use os dados de teste do Salabim, nenhum valor é cobrado.)' : '';
     return `Pague por Pix ou cartão neste link (vale ${await this.prazo(c, cob.unidade_id, cob.expira_em)}):\n${cob.link}${teste}`;

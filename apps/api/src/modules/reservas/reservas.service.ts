@@ -606,6 +606,7 @@ export class Reservas implements OnModuleInit {
       tipo: 'resumo',
       ...e,
       quarto: nome,
+      foto: b.salas?.find((x) => x.n === o.sala)?.foto ?? o.foto ?? null,
       tarifa: cartaoTarifa(o),
       diarias,
       impostos,
