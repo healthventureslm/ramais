@@ -36,4 +36,4 @@ export type DadosTemporizador =
   /** Conferir no provedor se o link de pagamento foi pago (repete até pagar ou vencer). */
   | { tipo: 'cobranca'; orgId: string; cobrancaId: string; tentativa: number }
   /** Link de pagamento da reserva: lembrete antes de vencer e o aviso de vencido. */
-  | { tipo: 'reserva_link'; orgId: string; reservaId: string; etapa: 'lembrete' | 'expira' };
+  | { tipo: 'reserva_link'; orgId: string; reservaId: string; etapa: 'lembrete' | 'vence' | 'ultima' | 'expira' };

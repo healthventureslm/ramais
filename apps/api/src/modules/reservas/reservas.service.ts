@@ -108,8 +108,17 @@ const VAZIA: ExtracaoReserva = {
 const SIM = /^(sim|s|ok|okay|pode|pode sim|confirmo|confirma|confirmado|isso|claro|fechado|quero|bora|yes|yep|sure|s[ií]|vale|dale)\b[\s.!]*/i;
 /** Mais noites sem lista de hóspedes: o hotel não sabe o check-out de hoje e pergunta. */
 const PERGUNTA_CHECKOUT_HOJE = 'Claro! Qual é o dia do seu check-out hoje';
+/** Depois do resumo, como no bot da VOA: o titular e o e-mail, e só então o link. */
+const PERGUNTA_TITULAR = 'Para gerar o link de pagamento, me envie seu nome completo e e-mail.';
+const PERGUNTA_EMAIL = 'E qual e-mail para receber a confirmação da reserva? Se preferir não informar, responda "sem e-mail".';
+const PERGUNTA_CONFIRMA = 'Posso gerar o link de pagamento?';
+const SEM_VAGA = 'Não encontrei disponibilidade';
+/** "5 anos cada", "todas com 5": uma idade vale para todas as crianças. */
+const CADA = /(?<!\p{L})(cada|tod[ao]s|ambos|ambas|each|all|both)(?!\p{L})/iu;
 const DIAS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MAX_QUARTOS = 6;
+/** Lembretes do link de pagamento (temporizador `reserva_link`). */
+type EtapaLink = 'lembrete' | 'vence' | 'ultima' | 'expira';
 const MAX_TARIFAS = 6;
 /** Botões do resumo e das tarifas ("Trocar tarifa", "Change room"…). */
 const TROCAR_TARIFA = /^(trocar|mudar|outra|change|other|cambiar|otra)\b.{0,12}\b(tarifa|rate)\b/i;
@@ -126,7 +135,8 @@ const noitesEntre = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00
 
 function pessoasTexto(p: PedidoReserva): string {
   const ad = p.adultos ?? 0;
-  const cr = p.idadesCriancas?.length ?? p.criancas ?? 0;
+  // As crianças ditas, mesmo antes de todas as idades (a lista de idades pode estar incompleta).
+  const cr = Math.max(p.criancas ?? 0, p.idadesCriancas?.length ?? 0);
   const partes = [`${ad} ${ad === 1 ? 'adulto' : 'adultos'}`];
   if (cr) partes.push(`${cr} ${cr === 1 ? 'criança' : 'crianças'}`);
   if ((p.quartos ?? 1) > 1) partes.push(`${p.quartos} quartos`);
@@ -354,6 +364,7 @@ export class Reservas implements OnModuleInit {
 
     // Junta o que a mensagem trouxe ao que já se sabia.
     const p: PedidoReserva = { ...r.pedido };
+    let avisoAdultos: string | null = null;
     if (ex) {
       if (ex.estender) p.estender = true;
       if (ex.checkIn) p.checkIn = ex.checkIn;
@@ -361,8 +372,27 @@ export class Reservas implements OnModuleInit {
       if (ex.noites) p.noites = ex.noites;
       if (ex.quartos) p.quartos = ex.quartos;
       if (ex.adultos) p.adultos = ex.adultos;
-      if (ex.criancas !== null) p.criancas = ex.criancas;
-      if (ex.idadesCriancas.length) p.idadesCriancas = ex.idadesCriancas;
+      if (ex.criancas !== null) {
+        // Correção vale por inteiro: "nenhuma criança" apaga as idades ditas antes (elas ficavam e
+        // a busca seguia com 7 crianças).
+        p.criancas = ex.criancas;
+        const antes = p.idadesCriancas ?? [];
+        p.idadesCriancas = ex.criancas === 0 ? [] : antes.slice(0, ex.criancas);
+      }
+      if (ex.idadesCriancas.length) {
+        let idades = ex.idadesCriancas;
+        // "5 anos cada" com 3 crianças: uma idade para todas.
+        if (idades.length === 1 && (p.criancas ?? 0) > 1 && CADA.test(texto)) idades = Array.from({ length: p.criancas! }, () => idades[0]!);
+        // 18 anos ou mais é adulto ("95 anos" não é idade de criança: a pergunta voltava sem explicação).
+        const adultas = idades.filter((i) => i >= 18);
+        if (adultas.length) {
+          idades = idades.filter((i) => i < 18);
+          p.adultos = (p.adultos ?? 0) + adultas.length;
+          p.criancas = Math.max(idades.length, (p.criancas ?? 0) - adultas.length);
+          avisoAdultos = `Com ${adultas.join(' e ')} anos conta como adulto: ficam ${pessoasTexto(p)}.`;
+        }
+        p.idadesCriancas = idades;
+      }
     }
     // Estender a estadia: a entrada é o check-out atual (lista de hóspedes do quarto).
     if (p.estender && !p.checkIn && s.local_id) {
@@ -376,6 +406,7 @@ export class Reservas implements OnModuleInit {
     if (p.checkIn && p.checkOut && p.checkOut <= p.checkIn) p.checkOut = null;
     const mudouPedido = JSON.stringify(p) !== JSON.stringify(r.pedido);
     r = await this.mudar(c, r, { pedido: p });
+    if (avisoAdultos) await this.falar(c, s, avisoAdultos);
     if (r.tipo === 'extensao') return this.tratarExtensao(c, s, r, p, ex, mudouPedido);
 
     // Nome e e-mail do titular (o hóspede pode mandar junto com a escolha).
@@ -443,9 +474,9 @@ export class Reservas implements OnModuleInit {
     }
 
     if (r.estado === 'titular' && !mudouPedido) {
-      // Acabou de escolher: o resumo com diárias, impostos e total, antes de pedir o titular.
+      // Acabou de escolher: o resumo com diárias, impostos e total, que já termina pedindo o titular.
       if (escolheuAgora && r.busca?.salas) await this.mostrarResumo(c, s, r);
-      await this.pedirTitular(c, s, r);
+      else await this.pedirTitular(c, s, r, ex?.sim ?? false);
       return true;
     }
 
@@ -472,28 +503,44 @@ export class Reservas implements OnModuleInit {
       return true;
     }
 
+    // Sem vaga da última vez e nada mudou ("sim, quero tentar"): pergunta as novas datas em vez de
+    // buscar de novo as mesmas. Mudou a ocupação: busca de novo nas mesmas datas.
+    if (!mudouPedido && r.ultima_pergunta?.startsWith(SEM_VAGA)) {
+      r = await this.mudar(c, r, { pedido: { ...p, checkIn: null, checkOut: null, noites: null } });
+      await this.perguntar(c, s, r, 'Quais outras datas você quer tentar? Me diga o dia de entrada e o de saída.');
+      return true;
+    }
+
     await this.buscar(c, s, r, p);
     return true;
   }
 
   /** Escolhido o quarto e a tarifa: o nome do titular (se ainda não sabemos) e o link. */
-  private async pedirTitular(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
-    if (!r.titular_nome) {
-      const nome = await this.nomeConhecido(c, s);
-      if (nome) r = await this.mudar(c, r, { titular_nome: nome });
+  /**
+   * Escolhidos o quarto e a tarifa: nome completo e e-mail do titular (sempre perguntados, como no
+   * bot da VOA: o nome do perfil do WhatsApp nem sempre é o de quem vai se hospedar), e o link. O
+   * e-mail é pedido uma vez; sem ele, o link sai assim mesmo.
+   */
+  private async pedirTitular(c: Ctx, s: SolicitacaoRow, r: ReservaRow, sim = false) {
+    const pergunta = this.perguntaDoTitular(r);
+    if (pergunta === PERGUNTA_CONFIRMA && sim) {
+      await this.gerarLink(c, s, r);
+      return;
     }
-    if (!r.titular_nome) {
-      await this.perguntar(
-        c,
-        s,
-        r,
-        r.busca?.salas
-          ? 'Para gerar o link de pagamento, me diga o nome completo do titular da reserva. Se quiser receber a confirmação por e-mail, mande o e-mail também.'
-          : 'Ótima escolha! Para emitir o link de pagamento, qual o nome completo do titular da reserva? Se quiser receber a confirmação por e-mail, mande o e-mail também.',
-      );
+    if (pergunta) {
+      await this.perguntar(c, s, r, pergunta);
       return;
     }
     await this.gerarLink(c, s, r);
+  }
+
+  /** O que falta perguntar antes do link (null: pode gerar). */
+  private perguntaDoTitular(r: ReservaRow, noResumo = false): string | null {
+    if (!r.titular_nome) return PERGUNTA_TITULAR;
+    if (!r.titular_email && r.ultima_pergunta !== PERGUNTA_EMAIL) return PERGUNTA_EMAIL;
+    // Já sabíamos tudo antes do resumo (veio junto do pedido): confirma antes de gerar.
+    if (noResumo || r.ultima_pergunta === PERGUNTA_CONFIRMA) return PERGUNTA_CONFIRMA;
+    return null;
   }
 
   private async buscar(c: Ctx, s: SolicitacaoRow, r: ReservaRow, p: PedidoReserva) {
@@ -507,13 +554,14 @@ export class Reservas implements OnModuleInit {
     }
     const periodo = `de ${dm(p.checkIn!)} a ${dm(p.checkOut!)}`;
     if (!busca.ok || !busca.id) {
-      r = await this.mudar(c, r, { estado: 'coletando', pedido: { ...p, checkIn: null, checkOut: null, noites: null } });
+      // As datas ficam: se o hóspede corrigir as pessoas, a busca refaz nas mesmas datas.
+      r = await this.mudar(c, r, { estado: 'coletando' });
       await this.acoes.notaInterna(c, s.id, `Reserva: sem disponibilidade ${periodo} para ${pessoasTexto(p)}${busca.motivo ? ` (${busca.motivo})` : ''}.`, { tipo: 'sistema' });
       await this.perguntar(
         c,
         s,
         r,
-        `Não encontrei disponibilidade ${periodo} para ${pessoasTexto(p)}${busca.motivo ? `: ${busca.motivo}` : ''}. Quer tentar outras datas?`,
+        `${SEM_VAGA} ${periodo} para ${pessoasTexto(p)}${busca.motivo ? `: ${busca.motivo}` : ''}. Quer tentar outras datas ou mudar o número de pessoas?`,
       );
       return;
     }
@@ -542,7 +590,6 @@ export class Reservas implements OnModuleInit {
     if (so && opcoes.length === 1) {
       r = await this.mudar(c, r, { estado: 'titular', escolha: opcoes[0] });
       await this.mostrarResumo(c, s, r);
-      await this.pedirTitular(c, s, r);
     } else if (so) await this.mostrarTarifas(c, s, r);
     else await this.mostrarQuartos(c, s, r);
   }
@@ -583,7 +630,10 @@ export class Reservas implements OnModuleInit {
     await this.perguntar(c, s, r, texto, { tipo: 'tarifas', ...e, quarto: sala.nome, foto: sala.foto, tarifas: tarifas.map(cartaoTarifa) });
   }
 
-  /** Resumo da escolha: datas, quarto, tarifa, diárias, impostos e total. */
+  /**
+   * Resumo da escolha (datas, quarto, tarifa, diárias, impostos e total) numa mensagem só, que termina
+   * pedindo o titular: o link sai depois da resposta, nunca antes do resumo chegar.
+   */
   private async mostrarResumo(c: Ctx, s: SolicitacaoRow, r: ReservaRow) {
     const b = r.busca!;
     const o = r.escolha!;
@@ -602,8 +652,11 @@ export class Reservas implements OnModuleInit {
       ...(impostos ? [`Impostos (ISS): ${brl(impostos)}`] : []),
       `Total: ${brl(o.total)}`,
     ].join('\n');
-    await this.falar(c, s, texto, {
+    const pergunta = this.perguntaDoTitular({ ...r, ultima_pergunta: null }, true)!;
+    await this.mudar(c, r, { ultima_pergunta: pergunta });
+    await this.falar(c, s, `${texto}\n\n${pergunta}`, {
       tipo: 'resumo',
+      pergunta: pergunta === PERGUNTA_TITULAR ? 'titular' : pergunta === PERGUNTA_EMAIL ? 'email' : 'confirmar',
       ...e,
       quarto: nome,
       foto: b.salas?.find((x) => x.n === o.sala)?.foto ?? o.foto ?? null,
@@ -679,13 +732,29 @@ export class Reservas implements OnModuleInit {
       ultima_pergunta: null,
     });
     const fuso = (await this.unidades.versaoAtual(c.tx, s.unidade_id)).fuso;
-    const ate = new Intl.DateTimeFormat('pt-BR', { timeZone: fuso, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(oferta.expira));
+    const ate = new Intl.DateTimeFormat('pt-BR', { timeZone: fuso, hour: '2-digit', minute: '2-digit' }).format(new Date(oferta.expira));
     const p = r.pedido;
     const resumo = `${escolha.quartoNome}, ${escolha.regimeNome.toLowerCase()}, de ${dm(b.checkIn)} a ${dm(b.checkOut)}, ${pessoasTexto(p)}`;
+    const noites = noitesEntre(b.checkIn, b.checkOut);
+    const minutos = Math.max(1, Math.round((Date.parse(oferta.expira) - Date.now()) / 60_000));
+    const validade = minutos < 120 ? `${minutos} minutos` : `${Math.round(minutos / 60)} horas`;
+    // Como no bot da VOA: o aviso de que ainda não está garantida, o quarto, o total e a validade.
+    // O link fica numa linha só: no WhatsApp ele sai do texto e vai para o botão "Pagar agora".
     await this.falar(
       c,
       s,
-      `Pronto! ${resumo}. Total: ${brl(oferta.total)}.\nPague por este link até ${ate} (cartão de crédito, com parcelamento, ou Pix):\n${oferta.link}\nAssim que o pagamento for confirmado, eu aviso aqui.`,
+      [
+        'Sua reserva ainda não está garantida. Para finalizar, faça o pagamento pelo link.',
+        '',
+        escolha.quartoNome,
+        `Total: ${brl(oferta.total)}`,
+        `${noites} ${noites === 1 ? 'diária' : 'diárias'}, de ${dm(b.checkIn)} a ${dm(b.checkOut)}, ${pessoasTexto(p)}`,
+        `Link válido por ${validade}, até ${ate} (cartão de crédito, com parcelamento, ou Pix).`,
+        '',
+        oferta.link,
+        '',
+        'Assim que o pagamento for confirmado, eu aviso aqui.',
+      ].join('\n'),
       {
         tipo: 'pagamento',
         motivo: 'nova',
@@ -1021,12 +1090,15 @@ export class Reservas implements OnModuleInit {
       if (n) return { ...VAZIA, modelo: ex.modelo, escolha: n, sobreReserva: true };
     }
     if (r.estado === 'titular') {
+      if (r.ultima_pergunta === PERGUNTA_CONFIRMA && SIM.test(t)) return { ...ex, sim: true, sobreReserva: true };
       const email = /[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}/.exec(t)?.[0] ?? null;
       const resto = t.replace(email ?? '', '').replace(/[,;]+/g, ' ').trim();
       const pareceNome = /^[\p{L}' .-]{3,80}$/u.test(resto) && resto.split(/\s+/).length >= 2 && resto.split(/\s+/).length <= 6;
-      if (!ex.nome && pareceNome) ex = { ...ex, nome: resto };
+      // O nome só vale enquanto ele falta ("não tenho e-mail" também tem cara de nome).
+      if (!ex.nome && pareceNome && !r.titular_nome) ex = { ...ex, nome: resto };
       if (!ex.email && email) ex = { ...ex, email };
-      if (ex.nome || ex.email) return { ...ex, sobreReserva: true };
+      // Qualquer resposta à pergunta do e-mail é da reserva ("sem e-mail" segue sem ele).
+      if (ex.nome || ex.email || r.ultima_pergunta === PERGUNTA_EMAIL) return { ...ex, sobreReserva: true };
     }
     return ex;
   }
@@ -1053,29 +1125,67 @@ export class Reservas implements OnModuleInit {
    * pagamento, o aviso (o webhook EXPIRED da VOA pode nem vir).
    */
   private async agendarLembretes(c: Ctx, reservaId: string, expira: Date) {
-    const falta = expira.getTime() - Date.now();
-    const lembrete = expira.getTime() - Math.min(20 * 60_000, falta / 3);
-    await this.nucleo.temporizador(c, { tipo: 'reserva_link', orgId: c.tx.orgId, reservaId, etapa: 'lembrete' }, new Date(lembrete));
-    await this.nucleo.temporizador(c, { tipo: 'reserva_link', orgId: c.tx.orgId, reservaId, etapa: 'expira' }, new Date(expira.getTime() + 30_000));
+    // Como no bot da VOA (link de 1 h: lembretes aos 20, 40 e 59 min): um terço, dois terços, a
+    // última chance pouco antes de vencer e o aviso de vencido.
+    const agora = Date.now();
+    const falta = Math.max(0, expira.getTime() - agora);
+    const etapas: [EtapaLink, number][] = [
+      ['lembrete', agora + falta / 3],
+      ['vence', agora + (2 * falta) / 3],
+      ['ultima', expira.getTime() - Math.min(2 * 60_000, falta / 10)],
+      ['expira', expira.getTime() + 30_000],
+    ];
+    for (const [etapa, quando] of etapas) {
+      await this.nucleo.temporizador(c, { tipo: 'reserva_link', orgId: c.tx.orgId, reservaId, etapa }, new Date(quando));
+    }
   }
 
   /** Temporizador do link de pagamento da reserva (ver `agendarLembretes`). */
-  async lembrarLink(orgId: string, reservaId: string, etapa: 'lembrete' | 'expira'): Promise<void> {
+  async lembrarLink(orgId: string, reservaId: string, etapa: EtapaLink): Promise<void> {
     await this.nucleo.executar(orgId, async (c) => {
       const q = await c.tx.client.query<ReservaRow>('SELECT * FROM reserva_hospedagem WHERE id = $1 FOR UPDATE', [reservaId]);
       const r = q.rows[0];
       if (!r || r.estado !== 'aguardando_pagamento' || r.tipo !== 'nova' || !r.expira_em) return;
       const s = await this.acoes.carregar(c, r.solicitacao_id, false);
-      if (etapa === 'lembrete') {
+      const u = await c.tx.client.query<{ nome: string }>('SELECT nome FROM unidade WHERE id = $1', [s.unidade_id]);
+      const hotel = u.rows[0]?.nome ?? 'hotel';
+      if (etapa !== 'expira') {
         if (new Date(r.expira_em).getTime() < Date.now()) return;
         const fuso = (await this.unidades.versaoAtual(c.tx, s.unidade_id)).fuso;
         const ate = new Intl.DateTimeFormat('pt-BR', { timeZone: fuso, hour: '2-digit', minute: '2-digit' }).format(new Date(r.expira_em));
-        await this.falar(c, s, `Lembrete: o seu link de pagamento vale até ${ate}. Depois disso, o preço e o quarto não ficam mais guardados. Se precisar de ajuda, é só me chamar por aqui.`);
+        if (etapa === 'lembrete') {
+          await this.falar(c, s, 'Lembrete: o seu link de pagamento ainda está valendo.\n\nFalta pouco para garantir a sua reserva. Se precisar de ajuda, estou aqui.');
+        } else if (etapa === 'vence') {
+          await this.falar(c, s, `O seu link de pagamento vence às ${ate}.\n\nPara garantir a sua reserva, finalize o pagamento o quanto antes. Se tiver algum problema, me avise que eu ajudo.`);
+        } else {
+          // Última chance: o botão de pagar de novo, para não ter que procurar o link lá em cima.
+          const o = r.escolha;
+          await this.falar(
+            c,
+            s,
+            `Última chance: o seu link de pagamento vence às ${ate}.\n\nFinalize agora para não perder a reserva. Precisa de ajuda? Estou à disposição.\n\n${r.link ?? ''}`.trim(),
+            r.link && o && r.busca
+              ? { tipo: 'pagamento', motivo: 'nova', quarto: o.quartoNome, noites: noitesEntre(r.busca.checkIn, r.busca.checkOut), total: Number(r.total ?? o.total), link: r.link, expiraEm: new Date(r.expira_em).toISOString() }
+              : undefined,
+          );
+        }
         return;
       }
       await this.mudar(c, r, { estado: 'expirada' });
-      await this.falar(c, s, 'O link de pagamento venceu e a reserva não foi feita. Se ainda quiser, é só me dizer as datas que eu busco de novo.');
-      await this.acoes.notaInterna(c, s.id, 'Reserva: o link de pagamento venceu sem pagamento.', { tipo: 'sistema' });
+      await this.falar(
+        c,
+        s,
+        `O tempo para pagamento da sua cotação acabou e o link não vale mais.\n\nPara fazer uma nova reserva no ${hotel}, me diga as datas de entrada e de saída que eu busco de novo. Estou à disposição para ajudar.`,
+      );
+      await this.acoes.notaInterna(c, s.id, 'Reserva: o link de pagamento venceu sem pagamento. Vale a equipe de reservas procurar o hóspede para seguir com a reserva.', { tipo: 'sistema' });
+      // Como a central da VOA faz: alguém da equipe pode retomar o contato ("gostaria de seguir com a reserva?").
+      const o = r.escolha;
+      await this.avisarRecepcao(
+        c,
+        s,
+        'Reserva não paga: o link venceu',
+        `${r.titular_nome ?? 'Hóspede'}${o && r.busca ? ` · ${o.quartoNome}, ${dm(r.busca.checkIn)} a ${dm(r.busca.checkOut)}` : ''}${r.total ? ` · ${brl(Number(r.total))}` : ''}`,
+      );
     });
   }
 

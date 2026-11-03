@@ -32,6 +32,9 @@ export interface TextosCartao {
   cartaoComImpostos: string;
   cartaoTrocarTarifa: string;
   cartaoTrocarQuarto: string;
+  cartaoPerguntaTitular: string;
+  cartaoPerguntaEmail: string;
+  cartaoPerguntaConfirmar: string;
   cartaoPagamento: string;
   cartaoPagamentoDica: string;
   cartaoPagamentoDicaExtensao: string;
@@ -271,6 +274,11 @@ export function CartaoReserva({ cartao, t, idioma, ativo, responder, hora }: Pro
           <dd>{moeda(cartao.total)}</dd>
         </div>
       </dl>
+      {cartao.pergunta && (
+        <p className="cartao-res__dica">
+          {cartao.pergunta === 'titular' ? t.cartaoPerguntaTitular : cartao.pergunta === 'email' ? t.cartaoPerguntaEmail : t.cartaoPerguntaConfirmar}
+        </p>
+      )}
       {(cartao.trocarTarifa || cartao.trocarQuarto) && (
         <div className="cartao-res__acoes">
           {cartao.trocarTarifa && (

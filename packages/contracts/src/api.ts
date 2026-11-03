@@ -369,6 +369,8 @@ export type CartaoMensagem =
       /** Mais de uma tarifa no quarto (ou mais de um quarto): mostra "Trocar tarifa"/"Trocar quarto". */
       trocarTarifa: boolean;
       trocarQuarto: boolean;
+      /** O que o resumo pede no fim: nome e e-mail, só o e-mail, ou a confirmação para gerar o link. */
+      pergunta?: 'titular' | 'email' | 'confirmar';
     })
   | {
       tipo: 'pagamento';

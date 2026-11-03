@@ -71,7 +71,9 @@ export class ExtratorReservaLLM implements ExtratorReserva {
       'extend: true if they want to stay more nights in the stay they already have. When extending, check_in is the CURRENT check-out date (where the extra nights start) and check_out is the NEW check-out date; "my check-out is on the 30th" is check_in.',
       'nights: number of nights if stated without a check-out date.',
       'choice: the number of the chosen option when options were shown (the guest may answer "2", "the second", "the cheapest", or a room name).',
-      'adults/children: totals for the whole booking; children_ages: one age per child, only if stated.',
+      'adults/children: totals for the whole booking; children_ages: one age per child, only if stated. "5 years each" / "all 5" means that age for every child.',
+      'Corrections replace what was known: "actually 2 adults and no children" → adults 2, children 0, children_ages []. "no children" → children 0.',
+      'Report ages exactly as said, even 18 or older (the system counts them as adults).',
       'name: full name of the person the booking is for, only if the guest states it. email: only if stated.',
       'yes: true if the message is a yes / confirmation to the last question ("yes", "ok", "confirm", "go ahead").',
       'Use null for anything not stated. Never invent values.',
@@ -136,7 +138,8 @@ Reply ONLY with a JSON object with exactly these keys: ${chaves}.` }, pedido.men
       j = lerJson(r.conteudo) as Record<string, unknown>;
     }
     const data = (v: unknown) => (typeof v === 'string' && ISO.test(v) && v >= ctx.hoje ? v : null);
-    const idades = Array.isArray(j.children_ages) ? j.children_ages.filter((x): x is number => int(x, 0, 17) !== null) : [];
+    // Até 120: a reserva conta 18 anos ou mais como adulto e avisa ("95 anos" sumia e a pergunta voltava).
+    const idades = Array.isArray(j.children_ages) ? j.children_ages.filter((x): x is number => int(x, 0, 120) !== null) : [];
     const email = typeof j.email === 'string' && EMAIL.test(j.email.trim()) ? j.email.trim() : null;
     const nome = typeof j.name === 'string' && j.name.trim().length >= 3 ? j.name.trim().slice(0, 120) : null;
     return {

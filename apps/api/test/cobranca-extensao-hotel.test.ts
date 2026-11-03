@@ -316,7 +316,7 @@ describe.skipIf(!temBanco)('cobrança por link, mais noites e chat do hotel', ()
     );
     expect(s).toMatchObject({ nome: 'Visitante (chat do hotel)', local_id: null, contexto: { visitante: true } });
     // "Visitante (chat do hotel)" é nome nosso: depois do resumo, pergunta o titular.
-    expect(await proxima(tok)).toMatch(/^Para gerar o link de pagamento, me diga o nome completo do titular/);
+    expect(resumo).toMatch(/\n\nPara gerar o link de pagamento, me envie seu nome completo e e-mail\.$/);
 
     // Outro visitante não vê a conversa do primeiro.
     const outro = (await A.req('POST', '/chat/hotel', { codigo: u!.codigo_publico })).corpo.token as string;
